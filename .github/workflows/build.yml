@@ -27,7 +27,7 @@ jobs:
           channel: stable
           cache: true
 
-"      - name: Setup Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android API 36
@@ -90,8 +90,7 @@ jobs:
           cd "$PROJECT_DIR"
           flutter build apk --release
           mkdir -p "$GITHUB_WORKSPACE/output"
-          cp build/app/outputs/flutter-apk/app-release.apk \
-            "$GITHUB_WORKSPACE/output/KNUAF-AI-STUDIO.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/output/KNUAF-AI-STUDIO.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
