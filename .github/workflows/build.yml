@@ -1,4 +1,3 @@
-
 name: Build KNUAF AI STUDIO APK
 
 on:
@@ -34,17 +33,21 @@ jobs:
 
       - name: Install Android API 36
         run: |
+          yes | sdkmanager --licenses
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Extract project ZIP
         run: |
           mkdir extracted
           unzip -q KNUAF_AI_STUDIO_V2_GitHub_APK_Builder.zip -d extracted
+
           PUBSPEC=$(find extracted -name pubspec.yaml -print -quit)
+
           if [ -z "$PUBSPEC" ]; then
             echo "pubspec.yaml not found"
             exit 1
           fi
+
           PROJECT_DIR="$(dirname "$PUBSPEC")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
@@ -53,51 +56,81 @@ jobs:
           cd "$PROJECT_DIR"
           flutter create --platforms=android --org com.knaufhashemi .
 
-      - name: Set Android compile SDK 36
+      - name: Get dependencies
+        run: |
+          cd "$PROJECT_DIR"
+          flutter pub get
+
+      - name: Configure all Android modules to API 36
         run: |
           python3 - <<'PY'
           import os
           import re
           from pathlib import Path
 
-          root = Path(os.environ["PROJECT_DIR"]) / "android/app"
-          files = list(root.glob("build.gradle")) + list(root.glob("build.gradle.kts"))
+          android = Path(os.environ["PROJECT_DIR"]) / "android"
+          app = android / "app"
 
-          if not files:
-              raise SystemExit("Android app Gradle file not found")
+          app_files = (
+              list(app.glob("build.gradle")) +
+              list(app.glob("build.gradle.kts"))
+          )
 
-          changed = False
+          if not app_files:
+              raise SystemExit("App Gradle file not found")
 
-          for path in files:
+          for path in app_files:
               content = path.read_text()
-              updated, count = re.subn(
-                  r"(?m)^(\s*compileSdk(?:Version)?\s*(?:=)?\s*)flutter\.compileSdkVersion\b",
-                  r"\g<1>36",
+              content = re.sub(
+                  r"flutter\.compileSdkVersion",
+                  "36",
                   content
               )
-              if count:
-                  path.write_text(updated)
-                  changed = True
+              path.write_text(content)
 
-          if not changed:
-              raise SystemExit("Could not find Flutter compileSdk setting")
+          root_gradle = android / "build.gradle"
+
+          if not root_gradle.exists():
+              raise SystemExit("Root android/build.gradle not found")
+
+          content = root_gradle.read_text()
+
+          marker = "KNUAF_FORCE_COMPILE_SDK_36"
+
+          if marker not in content:
+              content += """
+
+          // KNUAF_FORCE_COMPILE_SDK_36
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion 36
+                      }
+                  }
+              }
+          }
+          """
+
+              root_gradle.write_text(content)
+
+          print("All Android modules configured for API 36")
           PY
-
-      - name: Get dependencies
-        run: |
-          cd "$PROJECT_DIR"
-          flutter pub get
 
       - name: Build release APK
         run: |
           cd "$PROJECT_DIR"
           flutter build apk --release
+
           mkdir -p "$GITHUB_WORKSPACE/output"
-          cp build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/output/KNUAF-AI-STUDIO.apk"
+
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "$GITHUB_WORKSPACE/output/KNUAF-AI-STUDIO.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: KNUAF-AI-STUDIO-APK
           path: output/KNUAF-AI-STUDIO.apk
+          if-no-files-found: error
           
