@@ -1,3 +1,4 @@
+
 name: Build KNUAF AI STUDIO APK
 
 on:
@@ -9,6 +10,10 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout source
@@ -26,19 +31,21 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools'
-
       - name: Install Android API 36
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort | tail -n 1)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: Extract project ZIP
         run: |
-          mkdir extracted
+          mkdir -p extracted
           unzip -q KNUAF_AI_STUDIO_V2_GitHub_APK_Builder.zip -d extracted
 
           PUBSPEC=$(find extracted -name pubspec.yaml -print -quit)
@@ -61,15 +68,30 @@ jobs:
           cd "$PROJECT_DIR"
           flutter pub get
 
-      - name: Configure all Android modules to API 36
+      - name: Configure all modules to compile SDK 36
         run: |
           python3 - <<'PY'
-          import os
           import re
+          import os
           from pathlib import Path
 
-          android = Path(os.environ["PROJECT_DIR"]) / "android"
-          app = android / "app"
+          project = Path(os.environ["PROJECT_DIR"])
+          app = project / "android" / "app"
+
+          def update_gradle(path):
+              content = path.read_text()
+
+              updated, count = re.subn(
+                  r"(?m)^(\s*compileSdk(?:Version)?\s*(?:=\s*)?)(?:flutter\.compileSdkVersion|\d+)",
+                  r"\g<1>36",
+                  content
+              )
+
+              if count:
+                  path.write_text(updated)
+                  print("Updated:", path)
+
+              return count
 
           app_files = (
               list(app.glob("build.gradle")) +
@@ -79,42 +101,27 @@ jobs:
           if not app_files:
               raise SystemExit("App Gradle file not found")
 
-          for path in app_files:
-              content = path.read_text()
-              content = re.sub(
-                  r"flutter\.compileSdkVersion",
-                  "36",
-                  content
+          app_changes = sum(update_gradle(p) for p in app_files)
+
+          if app_changes == 0:
+              raise SystemExit("Could not update app compileSdk")
+
+          cache = Path.home() / ".pub-cache"
+
+          plugin_changes = 0
+
+          if cache.exists():
+              gradle_files = (
+                  list(cache.rglob("build.gradle")) +
+                  list(cache.rglob("build.gradle.kts"))
               )
-              path.write_text(content)
 
-          root_gradle = android / "build.gradle"
+              for path in gradle_files:
+                  if path.parent.name == "android":
+                      plugin_changes += update_gradle(path)
 
-          if not root_gradle.exists():
-              raise SystemExit("Root android/build.gradle not found")
-
-          content = root_gradle.read_text()
-
-          marker = "KNUAF_FORCE_COMPILE_SDK_36"
-
-          if marker not in content:
-              content += """
-
-          // KNUAF_FORCE_COMPILE_SDK_36
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('android')) {
-                      project.android {
-                          compileSdkVersion 36
-                      }
-                  }
-              }
-          }
-          """
-
-              root_gradle.write_text(content)
-
-          print("All Android modules configured for API 36")
+          print("App compileSdk updated.")
+          print("Plugin Gradle changes:", plugin_changes)
           PY
 
       - name: Build release APK
