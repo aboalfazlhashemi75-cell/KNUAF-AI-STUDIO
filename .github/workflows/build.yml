@@ -27,6 +27,11 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Install Android API 36
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
       - name: Extract project ZIP
         run: |
           mkdir extracted
@@ -44,12 +49,40 @@ jobs:
           cd "$PROJECT_DIR"
           flutter create --platforms=android --org com.knaufhashemi .
 
+      - name: Set Android compile SDK 36
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path(os.environ["PROJECT_DIR"]) / "android/app"
+          files = list(root.glob("build.gradle")) + list(root.glob("build.gradle.kts"))
+          if not files:
+              raise SystemExit("Android app Gradle file not found")
+
+          changed = False
+          for path in files:
+              content = path.read_text()
+              updated, count = re.subn(
+                  r"(?m)^(\s*compileSdk(?:Version)?\s*(?:=)?\s*)flutter\.compileSdkVersion\b",
+                  r"\g<1>36",
+                  content
+              )
+              if count:
+                  path.write_text(updated)
+                  changed = True
+
+          if not changed:
+              raise SystemExit("Could not find Flutter compileSdk setting")
+          PY
+
       - name: Get dependencies
         run: |
           cd "$PROJECT_DIR"
           flutter pub get
 
-      - name: Build APK
+      - name: Build release APK
         run: |
           cd "$PROJECT_DIR"
           flutter build apk --release
