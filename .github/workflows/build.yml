@@ -1,3 +1,4 @@
+
 name: Build KNUAF AI STUDIO APK
 
 on:
@@ -27,11 +28,12 @@ jobs:
           cache: true
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
       - name: Install Android API 36
         run: |
-          sdkmanager --licenses
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Extract project ZIP
@@ -60,10 +62,12 @@ jobs:
 
           root = Path(os.environ["PROJECT_DIR"]) / "android/app"
           files = list(root.glob("build.gradle")) + list(root.glob("build.gradle.kts"))
+
           if not files:
               raise SystemExit("Android app Gradle file not found")
 
           changed = False
+
           for path in files:
               content = path.read_text()
               updated, count = re.subn(
@@ -96,3 +100,4 @@ jobs:
         with:
           name: KNUAF-AI-STUDIO-APK
           path: output/KNUAF-AI-STUDIO.apk
+          
