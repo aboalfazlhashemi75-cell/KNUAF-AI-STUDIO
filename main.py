@@ -1,5 +1,6 @@
 import os
 import uuid
+import json
 from pathlib import Path
 
 import httpx
@@ -15,7 +16,7 @@ BASE.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title="KNUAF AI STUDIO API",
-    version="0.2.0"
+    version="0.3.0"
 )
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -38,7 +39,7 @@ def health():
     return {
         "ok": True,
         "service": "KNUAF AI STUDIO",
-        "version": "0.2.0"
+        "version": "0.3.0"
     }
 
 
@@ -142,7 +143,9 @@ async def text_to_speech(payload: TTSRequest):
 async def content(
     video: UploadFile = File(...),
     transcript: str = Form(""),
-    business: str = Form("Knauf and interior decoration"),
+    business: str = Form(
+        "گروه دکوراسیون داخلی هاشمی؛ طراحی و اجرای کناف، سقف کاذب، نورپردازی و بازسازی"
+    ),
     platform: str = Form("Instagram Reels"),
     language: str = Form("Persian")
 ):
@@ -153,27 +156,99 @@ async def content(
     path = await save_upload(video)
 
     try:
+        if path.stat().st_size > 25 * 1024 * 1024:
+            raise HTTPException(
+                413,
+                "Video must be smaller than 25 MB."
+            )
 
         prompt = f"""
-You are a professional Persian social media content creator.
+You are an expert Persian Instagram content strategist
+specialized in construction, Knauf and interior decoration.
 
-Business: {business}
-Platform: {platform}
-Language: {language}
+BUSINESS:
+{business}
 
-Video transcript:
-{transcript or "No transcript provided."}
+PLATFORM:
+{platform}
 
-Create:
-1. Three creative Reel ideas.
-2. A strong opening hook for each idea.
-3. Suggested shot order.
-4. One professional Persian Instagram caption.
-5. A clear call to action.
-6. 8 to 12 relevant hashtags.
+OUTPUT LANGUAGE:
+{language}
 
-Do not invent scenes that are not supported by the transcript.
-Write naturally and professionally.
+VIDEO TRANSCRIPT:
+{transcript.strip() or "No transcript was provided."}
+
+IMPORTANT RULES:
+
+1. This business specializes in:
+   - Knauf drywall systems
+   - False ceilings
+   - Decorative ceilings
+   - Linear lighting
+   - Interior decoration
+   - Painting and patina
+   - Renovation and project execution
+
+2. Create content specifically relevant to this business.
+
+3. Use the transcript as the main source of information.
+
+4. Do not invent customers, names, locations, projects,
+   dialogue, measurements or events.
+
+5. Do not claim that you visually inspected the video.
+   You only have the transcript.
+
+6. If the transcript is empty or unrelated to the business,
+   suggest general Knauf and interior decoration content
+   without pretending it describes the video.
+
+7. Write naturally in fluent Persian.
+   Avoid awkward translations and exaggerated advertising.
+
+RETURN ONLY VALID JSON.
+Do not use Markdown code fences.
+
+Use exactly this JSON structure:
+
+{{
+  "ideas": [
+    {{
+      "title": "عنوان ایده اول",
+      "hook": "جمله جذاب شروع ریلز",
+      "shot_order": [
+        "پیشنهاد نمای اول",
+        "پیشنهاد نمای دوم",
+        "پیشنهاد نمای سوم"
+      ],
+      "editing_tip": "پیشنهاد تدوین"
+    }},
+    {{
+      "title": "عنوان ایده دوم",
+      "hook": "جمله جذاب شروع ریلز",
+      "shot_order": [
+        "پیشنهاد نمای اول",
+        "پیشنهاد نمای دوم",
+        "پیشنهاد نمای سوم"
+      ],
+      "editing_tip": "پیشنهاد تدوین"
+    }},
+    {{
+      "title": "عنوان ایده سوم",
+      "hook": "جمله جذاب شروع ریلز",
+      "shot_order": [
+        "پیشنهاد نمای اول",
+        "پیشنهاد نمای دوم",
+        "پیشنهاد نمای سوم"
+      ],
+      "editing_tip": "پیشنهاد تدوین"
+    }}
+  ],
+  "caption": "کپشن کامل و حرفه‌ای فارسی همراه با دعوت به اقدام و هشتگ‌های مرتبط"
+}}
+
+The caption must be complete, ready to publish,
+and contain relevant Persian hashtags.
 """
 
         async with httpx.AsyncClient(timeout=120) as client:
@@ -188,11 +263,19 @@ Write naturally and professionally.
                     "model": "openai/gpt-oss-20b",
                     "messages": [
                         {
+                            "role": "system",
+                            "content": (
+                                "You are a professional Persian "
+                                "content creator. Return valid JSON only."
+                            )
+                        },
+                        {
                             "role": "user",
                             "content": prompt
                         }
                     ],
-                    "temperature": 0.7
+                    "temperature": 0.5,
+                    "max_completion_tokens": 3000
                 }
             )
 
@@ -202,11 +285,25 @@ Write naturally and professionally.
                 f"AI content error: {response.text[:1000]}"
             )
 
-        result = response.json()["choices"][0]["message"]["content"]
+        result = response.json()
+
+        ai_text = result["choices"][0]["message"]["content"]
+
+        try:
+            parsed = json.loads(ai_text)
+
+        except json.JSONDecodeError:
+            cleaned = ai_text.strip()
+
+            if cleaned.startswith("```"):
+                cleaned = cleaned.replace("```json", "", 1)
+                cleaned = cleaned.replace("```", "")
+
+            parsed = json.loads(cleaned.strip())
 
         return {
-            "ideas": result,
-            "caption": ""
+            "ideas": parsed.get("ideas", []),
+            "caption": parsed.get("caption", "")
         }
 
     except HTTPException:
