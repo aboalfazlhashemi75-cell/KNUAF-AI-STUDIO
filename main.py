@@ -1,7 +1,6 @@
 import os
 import json
 import uuid
-import re
 import subprocess
 from pathlib import Path
 
@@ -14,32 +13,52 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 
-# -----------------------------
+# =========================
 # SETTINGS
-# -----------------------------
+# =========================
+
+VERSION = "0.5.0"
 
 BASE = Path(os.getenv("KNUAF_DATA_DIR", "./data")).resolve()
 BASE.mkdir(parents=True, exist_ok=True)
 
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_URL = "https://api.groq.com/openai/v1"
+
+DEEPGRAM_URL = "https://api.deepgram.com/v1/listen"
+
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 app = FastAPI(
-    title="KNUAF AI STUDIO API",
-    version="0.4.2"
+    title="KNUAF AI STUDIO",
+    version=VERSION
 )
 
 
-# -----------------------------
-# HEALTH
-# -----------------------------
+# =========================
+# MODELS
+# =========================
+
+class ContentRequest(BaseModel):
+    transcript: str
+    business: str = "KNUAF HASHEMI"
+
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "fa-IR-DilaraNeural"
+
+
+# =========================
+# HOME
+# =========================
 
 @app.get("/")
-async def root():
+async def home():
     return {
-        "service": "KNUAF AI STUDIO",
-        "status": "online",
-        "version": "0.4.2"
+        "app": "KNUAF AI STUDIO",
+        "version": VERSION,
+        "status": "online"
     }
 
 
@@ -47,49 +66,204 @@ async def root():
 async def health():
     return {
         "ok": True,
-        "service": "KNUAF AI STUDIO",
-        "version": "0.4.2"
+        "version": VERSION,
+        "deepgram_configured": bool(DEEPGRAM_API_KEY),
+        "groq_configured": bool(GROQ_API_KEY)
     }
 
 
-# -----------------------------
-# HELPERS
-# -----------------------------
+# =========================
+# VIDEO TO WAV
+# =========================
 
-def check_api_key():
-    if not GROQ_API_KEY:
+async def extract_audio(video_path: Path, wav_path: Path):
+
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+
+    command = [
+        ffmpeg,
+        "-y",
+        "-i", str(video_path),
+        "-vn",
+        "-ac", "1",
+        "-ar", "16000",
+        "-acodec", "pcm_s16le",
+        str(wav_path)
+    ]
+
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=180
+    )
+
+    if result.returncode != 0:
         raise HTTPException(
-            status_code=500,
-            detail="GROQ_API_KEY is not configured."
+            status_code=400,
+            detail="Audio extraction failed"
+        )
+
+    if not wav_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Audio file was not created"
+        )
+
+    if wav_path.stat().st_size == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Video has no usable audio"
         )
 
 
-def extract_json(text):
-    text = text.strip()
+# =========================
+# DEEPGRAM TRANSCRIPTION
+# =========================
 
-    text = re.sub(
-        r"^```(?:json)?\s*",
-        "",
-        text,
-        flags=re.IGNORECASE
-    )
+async def transcribe_deepgram(wav_path: Path):
 
-    text = re.sub(r"\s*```$", "", text)
+    if not DEEPGRAM_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="DEEPGRAM_API_KEY is not configured"
+        )
+
+    params = [
+        ("model", "nova-3"),
+        ("language", "fa"),
+        ("smart_format", "true"),
+        ("punctuate", "true"),
+        ("keyterm", "پاساژ"),
+        ("keyterm", "کناف"),
+        ("keyterm", "هاشمی")
+    ]
+
+    headers = {
+        "Authorization": f"Token {DEEPGRAM_API_KEY}",
+        "Content-Type": "audio/wav"
+    }
+
+    audio_data = wav_path.read_bytes()
+
+    async with httpx.AsyncClient(timeout=180) as client:
+
+        response = await client.post(
+            DEEPGRAM_URL,
+            params=params,
+            headers=headers,
+            content=audio_data
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Deepgram error: {response.text[:1000]}"
+        )
+
+    data = response.json()
 
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
+        alternative = (
+            data["results"]["channels"][0]["alternatives"][0]
+        )
 
-        if start >= 0 and end > start:
-            return json.loads(text[start:end + 1])
+        transcript = alternative.get("transcript", "")
+        confidence = alternative.get("confidence", 0)
 
-        raise ValueError("AI did not return valid JSON.")
+    except (KeyError, IndexError, TypeError):
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid Deepgram response"
+        )
+
+    return {
+        "text": transcript.strip(),
+        "confidence": confidence,
+        "language": "fa",
+        "provider": "deepgram",
+        "model": "nova-3"
+    }
 
 
-async def groq_chat(prompt):
-    check_api_key()
+# =========================
+# TRANSCRIBE VIDEO
+# =========================
+
+@app.post("/transcribe")
+async def transcribe(
+    video: UploadFile = File(...)
+):
+
+    job_id = str(uuid.uuid4())
+
+    video_path = BASE / f"{job_id}.mp4"
+    wav_path = BASE / f"{job_id}.wav"
+
+    try:
+
+        video_data = await video.read()
+
+        if not video_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Empty video"
+            )
+
+        if len(video_data) > 100 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail="Video is larger than 100 MB"
+            )
+
+        video_path.write_bytes(video_data)
+
+        await extract_audio(
+            video_path,
+            wav_path
+        )
+
+        result = await transcribe_deepgram(wav_path)
+
+        return {
+            "ok": True,
+            "text": result["text"],
+            "language": result["language"],
+            "confidence": result["confidence"],
+            "provider": result["provider"],
+            "model": result["model"]
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+    finally:
+
+        for path in [video_path, wav_path]:
+            try:
+                if path.exists():
+                    path.unlink()
+            except Exception:
+                pass
+
+
+# =========================
+# GROQ AI
+# =========================
+
+async def groq_chat(prompt: str):
+
+    if not GROQ_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="GROQ_API_KEY is not configured"
+        )
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -102,9 +276,9 @@ async def groq_chat(prompt):
             {
                 "role": "system",
                 "content": (
-                    "You are an expert social media content creator. "
-                    "Follow the user's instructions exactly. "
-                    "Never invent facts or events."
+                    "تو دستیار حرفه‌ای تولید محتوای فارسی هستی. "
+                    "فقط بر اساس اطلاعات واقعی ارائه‌شده پاسخ بده. "
+                    "هیچ موضوع یا جزئیاتی را اختراع نکن."
                 )
             },
             {
@@ -112,13 +286,13 @@ async def groq_chat(prompt):
                 "content": prompt
             }
         ],
-        "temperature": 0.4,
-        "max_completion_tokens": 3000
+        "temperature": 0.4
     }
 
     async with httpx.AsyncClient(timeout=120) as client:
+
         response = await client.post(
-            f"{GROQ_URL}/chat/completions",
+            GROQ_URL,
             headers=headers,
             json=payload
         )
@@ -126,353 +300,81 @@ async def groq_chat(prompt):
     if response.status_code != 200:
         raise HTTPException(
             status_code=502,
-            detail={
-                "message": "Groq AI request failed",
-                "status": response.status_code,
-                "response": response.text[:1500]
-            }
+            detail=f"Groq error: {response.text[:1000]}"
         )
 
-    result = response.json()
+    data = response.json()
 
-    try:
-        return result["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        raise HTTPException(
-            status_code=502,
-            detail="Invalid response from AI provider."
-        )
+    return data["choices"][0]["message"]["content"]
 
 
-# -----------------------------
-# TRANSCRIBE VIDEO
-# -----------------------------
-
-@app.post("/transcribe")
-async def transcribe(
-    video: UploadFile = File(...)
-):
-    check_api_key()
-
-    extension = Path(video.filename or "video.mp4").suffix.lower()
-
-    if not extension or len(extension) > 10:
-        extension = ".mp4"
-
-    video_path = BASE / f"{uuid.uuid4()}{extension}"
-    audio_path = BASE / f"{uuid.uuid4()}.wav"
-
-    try:
-        content = await video.read()
-
-        if not content:
-            raise HTTPException(
-                status_code=400,
-                detail="Uploaded file is empty."
-            )
-
-        if len(content) > 100 * 1024 * 1024:
-            raise HTTPException(
-                status_code=413,
-                detail="Video is larger than 100 MB."
-            )
-
-        video_path.write_bytes(content)
-
-        # Extract audio as mono 16 kHz WAV
-
-        try:
-            ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-
-            command = [
-                ffmpeg_path,
-                "-y",
-                "-i", str(video_path),
-                "-vn",
-                "-ac", "1",
-                "-ar", "16000",
-                "-c:a", "pcm_s16le",
-                "-f", "wav",
-                str(audio_path)
-            ]
-
-            process = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=180
-            )
-
-            if process.returncode != 0:
-                raise RuntimeError(
-                    process.stderr[-1500:]
-                )
-
-        except subprocess.TimeoutExpired:
-            raise HTTPException(
-                status_code=504,
-                detail="Audio extraction timed out."
-            )
-
-        except Exception as error:
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "message": "Could not extract audio from video.",
-                    "error": str(error)[:1500]
-                }
-            )
-
-        if not audio_path.exists() or audio_path.stat().st_size == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="No audio track found in the uploaded video."
-            )
-
-        if audio_path.stat().st_size > 24 * 1024 * 1024:
-            raise HTTPException(
-                status_code=413,
-                detail="Extracted audio is larger than 24 MB."
-            )
-
-        audio_content = audio_path.read_bytes()
-
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}"
-        }
-
-        files = {
-            "file": (
-                "audio.wav",
-                audio_content,
-                "audio/wav"
-            )
-        }
-
-        data = {
-            "model": "whisper-large-v3",
-            "language": "fa",
-            "response_format": "verbose_json",
-            "temperature": "0",
-            "prompt": (
-                "این فایل صوتی شامل گفت‌وگوی فارسی محاوره‌ای است. "
-                "کلمات را دقیقاً مطابق صدای واقعی بنویس. "
-                "جملات روزمره، شوخی، مکالمه دو نفره و "
-                "اصطلاحات فارسی را حفظ کن. "
-                "کلمات نامفهوم را حدس نزن و چیزی نساز. "
-                "متن را با نگارش طبیعی فارسی بنویس."
-            )
-        }
-
-        async with httpx.AsyncClient(timeout=180) as client:
-            response = await client.post(
-                f"{GROQ_URL}/audio/transcriptions",
-                headers=headers,
-                files=files,
-                data=data
-            )
-
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "message": "Transcription failed",
-                    "status": response.status_code,
-                    "response": response.text[:1500]
-                }
-            )
-
-        result = response.json()
-
-        return {
-            "ok": True,
-            "text": result.get("text", ""),
-            "language": result.get("language", "fa")
-        }
-
-    finally:
-        if video_path.exists():
-            video_path.unlink()
-
-        if audio_path.exists():
-            audio_path.unlink()
-
-
-# -----------------------------
-# GENERATE CONTENT
-# -----------------------------
+# =========================
+# CONTENT GENERATION
+# =========================
 
 @app.post("/content")
-async def generate_content(
-    video: UploadFile = File(...),
-    transcript: str = Form(""),
-    business: str = Form(
-        "گروه دکوراسیون داخلی هاشمی"
-    ),
-    platform: str = Form("Instagram"),
-    language: str = Form("Persian")
-):
+async def generate_content(request: ContentRequest):
 
-    transcript = transcript.strip()
-    business = business.strip()
-    platform = platform.strip()
-    language = language.strip()
-
-    if len(transcript) > 15000:
-        transcript = transcript[:15000]
+    transcript = request.transcript.strip()
 
     if not transcript:
-        return {
-            "ok": True,
-            "needs_more_info": True,
-            "message": (
-                "متن گفتار فیلم خالی است. "
-                "لطفاً موضوع فیلم یا توضیح صحنه‌های آن را وارد کنید."
-            ),
-            "ideas": [],
-            "caption": ""
-        }
+        raise HTTPException(
+            status_code=400,
+            detail="Transcript is empty"
+        )
 
     prompt = f"""
-You are a professional social media content strategist.
+متن زیر پیاده‌سازی گفتار یک ویدئو است.
 
-Your task is to create social media content based on the ACTUAL SUBJECT
-of the video's spoken transcript.
-
-IMPORTANT RULES:
-
-1. The transcript is the primary source for identifying the video's topic.
-
-2. Do NOT automatically make every video about Knauf,
-construction, interior decoration, renovation or lighting.
-
-3. If the transcript is about cooking, travel, cars, daily life,
-entertainment, education, business or any other subject,
-create content about THAT subject.
-
-4. Business information is only background context.
-It must NEVER override the actual subject of the transcript.
-
-5. Never pretend that an unrelated video is a Knauf project.
-
-6. Never invent customers, locations, projects, measurements,
-prices, events, people or conversations.
-
-7. You have NOT visually inspected the video.
-You only have its transcript.
-
-8. If the transcript is unclear or incomplete,
-do not confidently guess the subject.
-
-9. If the transcript clearly identifies a subject unrelated
-to the business, create content about that subject.
-
-10. Write naturally in the requested language.
-
-BUSINESS BACKGROUND:
-{business}
-
-PLATFORM:
-{platform}
-
-OUTPUT LANGUAGE:
-{language}
-
-ACTUAL VIDEO TRANSCRIPT:
+متن گفتار:
 {transcript}
 
-Return ONLY valid JSON.
+نام کسب‌وکار:
+{request.business}
 
-Use exactly this structure:
+وظایف:
 
-{{
-  "needs_more_info": false,
-  "message": "",
-  "detected_topic": "The actual subject identified from the transcript",
-  "ideas": [
-    {{
-      "title": "Idea title",
-      "hook": "Opening hook",
-      "shot_order": [
-        "Suggested shot 1",
-        "Suggested shot 2",
-        "Suggested shot 3"
-      ],
-      "editing_tip": "Editing suggestion"
-    }},
-    {{
-      "title": "Idea title",
-      "hook": "Opening hook",
-      "shot_order": [
-        "Suggested shot 1",
-        "Suggested shot 2",
-        "Suggested shot 3"
-      ],
-      "editing_tip": "Editing suggestion"
-    }},
-    {{
-      "title": "Idea title",
-      "hook": "Opening hook",
-      "shot_order": [
-        "Suggested shot 1",
-        "Suggested shot 2",
-        "Suggested shot 3"
-      ],
-      "editing_tip": "Editing suggestion"
-    }}
-  ],
-  "caption": "Complete social media caption with relevant hashtags"
-}}
+1. موضوع واقعی ویدئو را تشخیص بده.
+2. یک ایده مناسب برای انتشار در اینستاگرام پیشنهاد بده.
+3. یک کپشن جذاب و طبیعی فارسی بنویس.
+4. هشتگ‌های مرتبط پیشنهاد بده.
+5. اگر ویدئو درباره کناف نیست، به هیچ عنوان آن را به کناف ربط نده.
+6. هیچ اطلاعاتی را که در متن وجود ندارد اختراع نکن.
+7. اگر بخشی از متن نامفهوم است، درباره آن حدس قطعی نزن.
 
-All ideas must be relevant to the actual transcript.
-
-If the transcript does not provide enough information,
-return:
+پاسخ را به صورت JSON با این ساختار بده:
 
 {{
-  "needs_more_info": true,
-  "message": "Please describe the video's subject.",
-  "detected_topic": "",
-  "ideas": [],
-  "caption": ""
+  "topic": "موضوع ویدئو",
+  "idea": "ایده انتشار",
+  "caption": "کپشن",
+  "hashtags": ["هشتگ اول", "هشتگ دوم"]
 }}
 """
 
-    ai_text = await groq_chat(prompt)
+    result = await groq_chat(prompt)
 
     try:
-        parsed = extract_json(ai_text)
+        start = result.find("{")
+        end = result.rfind("}") + 1
+
+        if start >= 0 and end > start:
+            parsed = json.loads(result[start:end])
+        else:
+            parsed = {"result": result}
+
     except Exception:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "message": "Could not parse AI response.",
-                "ai_response": ai_text[:2000]
-            }
-        )
+        parsed = {"result": result}
 
     return {
         "ok": True,
-        "needs_more_info": parsed.get(
-            "needs_more_info", False
-        ),
-        "message": parsed.get("message", ""),
-        "detected_topic": parsed.get(
-            "detected_topic", ""
-        ),
-        "ideas": parsed.get("ideas", []),
-        "caption": parsed.get("caption", "")
+        "content": parsed
     }
 
 
-# -----------------------------
+# =========================
 # TEXT TO SPEECH
-# -----------------------------
-
-class TTSRequest(BaseModel):
-    text: str
-    voice: str = "fa-IR-FaridNeural"
-
+# =========================
 
 @app.post("/tts")
 async def text_to_speech(request: TTSRequest):
@@ -482,45 +384,43 @@ async def text_to_speech(request: TTSRequest):
     if not text:
         raise HTTPException(
             status_code=400,
-            detail="Text cannot be empty."
+            detail="Text is empty"
         )
 
-    if len(text) > 5000:
-        raise HTTPException(
-            status_code=400,
-            detail="Text is too long."
-        )
-
-    allowed_voices = [
-        "fa-IR-FaridNeural",
-        "fa-IR-DilaraNeural"
+    voices = [
+        "fa-IR-DilaraNeural",
+        "fa-IR-FaridNeural"
     ]
 
-    if request.voice not in allowed_voices:
+    if request.voice not in voices:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported voice."
+            detail="Invalid voice"
         )
 
-    filename = f"{uuid.uuid4()}.mp3"
-    output_path = BASE / filename
+    job_id = str(uuid.uuid4())
+
+    audio_path = BASE / f"{job_id}.mp3"
 
     try:
+
         communicate = edge_tts.Communicate(
             text,
             request.voice
         )
 
-        await communicate.save(str(output_path))
+        await communicate.save(str(audio_path))
 
         return FileResponse(
-            path=output_path,
+            audio_path,
             media_type="audio/mpeg",
-            filename=filename
+            filename="knuaf_audio.mp3",
+            background=None
         )
 
-    except Exception as error:
+    except Exception as e:
+
         raise HTTPException(
             status_code=500,
-            detail=f"TTS failed: {str(error)}"
+            detail=f"TTS error: {str(e)}"
         )
