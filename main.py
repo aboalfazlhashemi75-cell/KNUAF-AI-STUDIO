@@ -1,4 +1,4 @@
-```python
+```
 import os
 import json
 import uuid
@@ -519,4 +519,3 @@ async def text_to_speech(request: TTSRequest):
             status_code=500,
             detail=f"TTS failed: {str(error)}"
         )
-```
