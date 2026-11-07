@@ -1,4 +1,3 @@
-```yaml
 name: Build KNUAF AI STUDIO APK
 
 on:
@@ -107,7 +106,6 @@ jobs:
               raise SystemExit("Could not update app compileSdk")
 
           cache = Path.home() / ".pub-cache"
-
           plugin_changes = 0
 
           if cache.exists():
@@ -140,4 +138,3 @@ jobs:
           name: KNUAF-AI-STUDIO-APK
           path: output/KNUAF-AI-STUDIO.apk
           if-no-files-found: error
-```
