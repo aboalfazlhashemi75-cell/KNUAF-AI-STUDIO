@@ -1,11 +1,14 @@
+```python
 import os
 import json
 import uuid
 import re
+import subprocess
 from pathlib import Path
 
 import httpx
 import edge_tts
+import imageio_ffmpeg
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
@@ -20,12 +23,11 @@ BASE = Path(os.getenv("KNUAF_DATA_DIR", "./data")).resolve()
 BASE.mkdir(parents=True, exist_ok=True)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
 GROQ_URL = "https://api.groq.com/openai/v1"
 
 app = FastAPI(
     title="KNUAF AI STUDIO API",
-    version="0.4.1"
+    version="0.4.2"
 )
 
 
@@ -38,7 +40,7 @@ async def root():
     return {
         "service": "KNUAF AI STUDIO",
         "status": "online",
-        "version": "0.4.1"
+        "version": "0.4.2"
     }
 
 
@@ -47,7 +49,7 @@ async def health():
     return {
         "ok": True,
         "service": "KNUAF AI STUDIO",
-        "version": "0.4.1"
+        "version": "0.4.2"
     }
 
 
@@ -153,10 +155,8 @@ async def transcribe(
 ):
     check_api_key()
 
-    filename = video.filename or "video.mp4"
-    extension = Path(filename).suffix or ".mp4"
-
-    temp_path = BASE / f"{uuid.uuid4()}{extension}"
+    video_path = BASE / f"{uuid.uuid4()}.mp4"
+    audio_path = BASE / f"{uuid.uuid4()}.mp3"
 
     try:
         content = await video.read()
@@ -170,10 +170,67 @@ async def transcribe(
         if len(content) > 100 * 1024 * 1024:
             raise HTTPException(
                 status_code=413,
-                detail="File is larger than 100 MB."
+                detail="Video is larger than 100 MB."
             )
 
-        temp_path.write_bytes(content)
+        video_path.write_bytes(content)
+
+        # Extract audio from video using FFmpeg
+        try:
+            ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+
+            command = [
+                ffmpeg_path,
+                "-y",
+                "-i", str(video_path),
+                "-vn",
+                "-ac", "1",
+                "-ar", "16000",
+                "-b:a", "64k",
+                "-codec:a", "libmp3lame",
+                str(audio_path)
+            ]
+
+            process = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=180
+            )
+
+            if process.returncode != 0:
+                raise RuntimeError(
+                    process.stderr[-1500:]
+                )
+
+        except subprocess.TimeoutExpired:
+            raise HTTPException(
+                status_code=504,
+                detail="Audio extraction timed out."
+            )
+
+        except Exception as error:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "message": "Could not extract audio from video.",
+                    "error": str(error)[:1500]
+                }
+            )
+
+        if not audio_path.exists() or audio_path.stat().st_size == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="No audio track found in the uploaded video."
+            )
+
+        if audio_path.stat().st_size > 24 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail="Extracted audio is larger than 24 MB."
+            )
+
+        audio_content = audio_path.read_bytes()
 
         headers = {
             "Authorization": f"Bearer {GROQ_API_KEY}"
@@ -181,9 +238,9 @@ async def transcribe(
 
         files = {
             "file": (
-                filename,
-                content,
-                video.content_type or "video/mp4"
+                "audio.mp3",
+                audio_content,
+                "audio/mpeg"
             )
         }
 
@@ -193,12 +250,12 @@ async def transcribe(
             "response_format": "verbose_json",
             "temperature": "0",
             "prompt": (
-                "این فایل شامل گفت‌وگوی فارسی محاوره‌ای است. "
-                "کلمات را دقیق و مطابق صدای واقعی بنویس. "
+                "این فایل صوتی شامل گفت‌وگوی فارسی محاوره‌ای است. "
+                "کلمات را دقیقاً مطابق صدای واقعی بنویس. "
                 "جملات روزمره، شوخی، مکالمه دو نفره و "
                 "اصطلاحات فارسی را حفظ کن. "
                 "کلمات نامفهوم را حدس نزن و چیزی نساز. "
-                "متن را به زبان فارسی و با نگارش طبیعی بنویس."
+                "متن را با نگارش طبیعی فارسی بنویس."
             )
         }
 
@@ -215,6 +272,7 @@ async def transcribe(
                 status_code=502,
                 detail={
                     "message": "Transcription failed",
+                    "status": response.status_code,
                     "response": response.text[:1500]
                 }
             )
@@ -228,8 +286,11 @@ async def transcribe(
         }
 
     finally:
-        if temp_path.exists():
-            temp_path.unlink()
+        if video_path.exists():
+            video_path.unlink()
+
+        if audio_path.exists():
+            audio_path.unlink()
 
 
 # -----------------------------
@@ -458,3 +519,4 @@ async def text_to_speech(request: TTSRequest):
             status_code=500,
             detail=f"TTS failed: {str(error)}"
         )
+```
