@@ -25,7 +25,7 @@ GROQ_URL = "https://api.groq.com/openai/v1"
 
 app = FastAPI(
     title="KNUAF AI STUDIO API",
-    version="0.4.0"
+    version="0.4.1"
 )
 
 
@@ -38,7 +38,7 @@ async def root():
     return {
         "service": "KNUAF AI STUDIO",
         "status": "online",
-        "version": "0.4.0"
+        "version": "0.4.1"
     }
 
 
@@ -47,7 +47,7 @@ async def health():
     return {
         "ok": True,
         "service": "KNUAF AI STUDIO",
-        "version": "0.4.0"
+        "version": "0.4.1"
     }
 
 
@@ -188,9 +188,18 @@ async def transcribe(
         }
 
         data = {
-            "model": "whisper-large-v3-turbo",
+            "model": "whisper-large-v3",
             "language": "fa",
-            "response_format": "verbose_json"
+            "response_format": "verbose_json",
+            "temperature": "0",
+            "prompt": (
+                "این فایل شامل گفت‌وگوی فارسی محاوره‌ای است. "
+                "کلمات را دقیق و مطابق صدای واقعی بنویس. "
+                "جملات روزمره، شوخی، مکالمه دو نفره و "
+                "اصطلاحات فارسی را حفظ کن. "
+                "کلمات نامفهوم را حدس نزن و چیزی نساز. "
+                "متن را به زبان فارسی و با نگارش طبیعی بنویس."
+            )
         }
 
         async with httpx.AsyncClient(timeout=180) as client:
@@ -246,7 +255,6 @@ async def generate_content(
     if len(transcript) > 15000:
         transcript = transcript[:15000]
 
-    # No speech or transcript
     if not transcript:
         return {
             "ok": True,
@@ -263,37 +271,35 @@ async def generate_content(
 You are a professional social media content strategist.
 
 Your task is to create social media content based on the ACTUAL SUBJECT
-of the uploaded video's spoken transcript.
+of the video's spoken transcript.
 
-IMPORTANT PRIORITY RULES:
+IMPORTANT RULES:
 
 1. The transcript is the primary source for identifying the video's topic.
 
-2. Do NOT automatically make every video about Knauf, construction,
-   interior decoration, renovation, lighting or the business.
+2. Do NOT automatically make every video about Knauf,
+construction, interior decoration, renovation or lighting.
 
 3. If the transcript is about cooking, travel, cars, daily life,
-   entertainment, education, business or any other subject,
-   create content about THAT subject.
+entertainment, education, business or any other subject,
+create content about THAT subject.
 
-4. The business information is only background context.
-   It must NEVER override the actual subject of the transcript.
+4. Business information is only background context.
+It must NEVER override the actual subject of the transcript.
 
-5. Do not pretend that an unrelated video is a Knauf project.
+5. Never pretend that an unrelated video is a Knauf project.
 
 6. Never invent customers, locations, projects, measurements,
-   prices, events, people, conversations or visual scenes.
+prices, events, people or conversations.
 
-7. Do not claim that you have visually inspected the video.
-   You only have its transcript.
+7. You have NOT visually inspected the video.
+You only have its transcript.
 
-8. If the transcript is unclear, incomplete or unrelated to any
-   identifiable subject, return needs_more_info=true and ask the
-   user to describe the video.
+8. If the transcript is unclear or incomplete,
+do not confidently guess the subject.
 
-9. If the transcript clearly identifies a subject unrelated to
-   the business, create relevant content for that subject.
-   Do not force business advertising into it.
+9. If the transcript clearly identifies a subject unrelated
+to the business, create content about that subject.
 
 10. Write naturally in the requested language.
 
@@ -355,7 +361,7 @@ Use exactly this structure:
 All ideas must be relevant to the actual transcript.
 
 If the transcript does not provide enough information,
-return this structure instead:
+return:
 
 {{
   "needs_more_info": true,
