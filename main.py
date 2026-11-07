@@ -1,100 +1,222 @@
-import os, uuid
+import os
+import uuid
 from pathlib import Path
+
+import httpx
+import edge_tts
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import edge_tts
-from faster_whisper import WhisperModel
-import httpx
+
 
 BASE = Path(os.getenv("KNUAF_DATA_DIR", "./data")).resolve()
 BASE.mkdir(parents=True, exist_ok=True)
-app = FastAPI(title="KNUAF AI STUDIO API", version="0.1.0")
-whisper_model = None
 
-def get_whisper():
-    global whisper_model
-    if whisper_model is None:
-        whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
-    return whisper_model
+app = FastAPI(
+    title="KNUAF AI STUDIO API",
+    version="0.2.0"
+)
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_URL = "https://api.groq.com/openai/v1"
+
 
 async def save_upload(upload: UploadFile) -> Path:
     suffix = Path(upload.filename or "clip.mp4").suffix or ".mp4"
     path = BASE / f"{uuid.uuid4().hex}{suffix}"
+
     with path.open("wb") as f:
         while chunk := await upload.read(1024 * 1024):
             f.write(chunk)
+
     return path
+
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "KNUAF AI STUDIO"}
+    return {
+        "ok": True,
+        "service": "KNUAF AI STUDIO",
+        "version": "0.2.0"
+    }
+
 
 @app.post("/transcribe")
 async def transcribe(video: UploadFile = File(...)):
+
+    if not GROQ_API_KEY:
+        raise HTTPException(503, "GROQ_API_KEY is missing.")
+
     path = await save_upload(video)
+
     try:
-        model = get_whisper()
-        segments, info = model.transcribe(str(path), language="fa", vad_filter=True)
-        items, full = [], []
-        for seg in segments:
-            text = seg.text.strip()
-            full.append(text)
-            items.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": text})
-        return {"language": info.language, "text": " ".join(full), "segments": items}
+        if path.stat().st_size > 25 * 1024 * 1024:
+            raise HTTPException(
+                413,
+                "Video must be smaller than 25 MB."
+            )
+
+        async with httpx.AsyncClient(timeout=180) as client:
+            with path.open("rb") as f:
+                response = await client.post(
+                    f"{GROQ_URL}/audio/transcriptions",
+                    headers={
+                        "Authorization": f"Bearer {GROQ_API_KEY}"
+                    },
+                    data={
+                        "model": "whisper-large-v3-turbo",
+                        "language": "fa",
+                        "response_format": "verbose_json"
+                    },
+                    files={
+                        "file": (
+                            path.name,
+                            f,
+                            video.content_type or "video/mp4"
+                        )
+                    }
+                )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                response.status_code,
+                f"Transcription error: {response.text[:1000]}"
+            )
+
+        result = response.json()
+
+        return {
+            "language": result.get("language", "fa"),
+            "text": result.get("text", ""),
+            "segments": result.get("segments", [])
+        }
+
+    except HTTPException:
+        raise
+
     except Exception as e:
-        raise HTTPException(500, f"Transcription failed: {e}")
+        raise HTTPException(
+            500,
+            f"Transcription failed: {str(e)}"
+        )
+
     finally:
         path.unlink(missing_ok=True)
+
 
 class TTSRequest(BaseModel):
     text: str
     voice: str = "fa-IR-FaridNeural"
 
+
 @app.post("/tts")
 async def text_to_speech(payload: TTSRequest):
+
     if not payload.text.strip():
-        raise HTTPException(400, "Text is required")
+        raise HTTPException(400, "Text is required.")
+
     file_id = uuid.uuid4().hex
     out = BASE / f"{file_id}.mp3"
+
     try:
-        await edge_tts.Communicate(payload.text, payload.voice).save(str(out))
-        return FileResponse(out, media_type="audio/mpeg", filename="knuaf-narration.mp3",
-                            headers={"X-Audio-File": file_id})
+        await edge_tts.Communicate(
+            payload.text,
+            payload.voice
+        ).save(str(out))
+
+        return FileResponse(
+            out,
+            media_type="audio/mpeg",
+            filename="knuaf-narration.mp3"
+        )
+
     except Exception as e:
-        raise HTTPException(500, f"TTS failed: {e}")
+        raise HTTPException(
+            500,
+            f"TTS failed: {str(e)}"
+        )
+
 
 @app.post("/content")
 async def content(
     video: UploadFile = File(...),
     transcript: str = Form(""),
-    business: str = Form("interior design and drywall"),
+    business: str = Form("Knauf and interior decoration"),
     platform: str = Form("Instagram Reels"),
-    language: str = Form("Persian"),
+    language: str = Form("Persian")
 ):
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise HTTPException(503, "Set OPENAI_API_KEY on the backend server first.")
+
+    if not GROQ_API_KEY:
+        raise HTTPException(503, "GROQ_API_KEY is missing.")
+
     path = await save_upload(video)
+
     try:
-        prompt = (
-            "You are a Persian social-video producer for a Knauf and interior-decoration contractor.\n"
-            f"Business: {business}\nPlatform: {platform}\nTranscript: {transcript or '(not supplied)'}\n"
-            "Write in Persian. Provide three reel concepts with opening hooks and suggested shot order. "
-            "Do not claim scenes exist unless supported by transcript. Then write one natural professional "
-            "caption with a clear call to action and 8-12 relevant hashtags. Avoid fake claims and promises of virality."
-        )
-        async with httpx.AsyncClient(timeout=90) as client:
+
+        prompt = f"""
+You are a professional Persian social media content creator.
+
+Business: {business}
+Platform: {platform}
+Language: {language}
+
+Video transcript:
+{transcript or "No transcript provided."}
+
+Create:
+1. Three creative Reel ideas.
+2. A strong opening hook for each idea.
+3. Suggested shot order.
+4. One professional Persian Instagram caption.
+5. A clear call to action.
+6. 8 to 12 relevant hashtags.
+
+Do not invent scenes that are not supported by the transcript.
+Write naturally and professionally.
+"""
+
+        async with httpx.AsyncClient(timeout=120) as client:
+
             response = await client.post(
-                os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1") + "/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-                      "messages": [{"role": "user", "content": prompt}], "temperature": 0.7},
+                f"{GROQ_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "openai/gpt-oss-20b",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "temperature": 0.7
+                }
             )
-        response.raise_for_status()
+
+        if response.status_code != 200:
+            raise HTTPException(
+                response.status_code,
+                f"AI content error: {response.text[:1000]}"
+            )
+
         result = response.json()["choices"][0]["message"]["content"]
-        return {"ideas": result, "caption": ""}
-    except httpx.HTTPError as e:
-        raise HTTPException(502, f"AI provider error: {e}")
+
+        return {
+            "ideas": result,
+            "caption": ""
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            500,
+            f"Content generation failed: {str(e)}"
+        )
+
     finally:
         path.unlink(missing_ok=True)
