@@ -1,4 +1,3 @@
-```
 import os
 import json
 import uuid
@@ -155,8 +154,13 @@ async def transcribe(
 ):
     check_api_key()
 
-    video_path = BASE / f"{uuid.uuid4()}.mp4"
-    audio_path = BASE / f"{uuid.uuid4()}.mp3"
+    extension = Path(video.filename or "video.mp4").suffix.lower()
+
+    if not extension or len(extension) > 10:
+        extension = ".mp4"
+
+    video_path = BASE / f"{uuid.uuid4()}{extension}"
+    audio_path = BASE / f"{uuid.uuid4()}.wav"
 
     try:
         content = await video.read()
@@ -175,7 +179,8 @@ async def transcribe(
 
         video_path.write_bytes(content)
 
-        # Extract audio from video using FFmpeg
+        # Extract audio as mono 16 kHz WAV
+
         try:
             ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -186,8 +191,8 @@ async def transcribe(
                 "-vn",
                 "-ac", "1",
                 "-ar", "16000",
-                "-b:a", "64k",
-                "-codec:a", "libmp3lame",
+                "-c:a", "pcm_s16le",
+                "-f", "wav",
                 str(audio_path)
             ]
 
@@ -238,9 +243,9 @@ async def transcribe(
 
         files = {
             "file": (
-                "audio.mp3",
+                "audio.wav",
                 audio_content,
-                "audio/mpeg"
+                "audio/wav"
             )
         }
 
