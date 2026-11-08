@@ -8,10 +8,6 @@ import 'package:video_player/video_player.dart';
 
 void main() => runApp(const KnaufStudioApp());
 
-// =========================
-// SETTINGS
-// =========================
-
 const gold = Color(0xFFD6AD55);
 const bg = Color(0xFF101010);
 const panel = Color(0xFF1B1B1B);
@@ -20,10 +16,6 @@ const String apiBaseUrl = String.fromEnvironment(
   'KNUAF_API_URL',
   defaultValue: 'https://knuaf-ai-studio.fastapicloud.dev',
 );
-
-// =========================
-// APP
-// =========================
 
 class KnaufStudioApp extends StatelessWidget {
   const KnaufStudioApp({super.key});
@@ -72,10 +64,6 @@ class KnaufStudioApp extends StatelessWidget {
   }
 }
 
-// =========================
-// HOME SCREEN
-// =========================
-
 class StudioHome extends StatefulWidget {
   const StudioHome({super.key});
 
@@ -91,7 +79,7 @@ class _StudioHomeState extends State<StudioHome> {
 
   bool busy = false;
 
-  String status = '???? ????? ?? ????? ?????? ??.';
+  String status = 'برای شروع، یک ویدئو انتخاب کنید.';
 
   String transcript = '';
   String ideas = '';
@@ -106,20 +94,12 @@ class _StudioHomeState extends State<StudioHome> {
 
   final voiceController = TextEditingController();
 
-  // =========================
-  // DISPOSE
-  // =========================
-
   @override
   void dispose() {
     videoController?.dispose();
     voiceController.dispose();
     super.dispose();
   }
-
-  // =========================
-  // ERROR HANDLING
-  // =========================
 
   String responseText(http.Response response) {
     return utf8.decode(
@@ -132,15 +112,11 @@ class _StudioHomeState extends State<StudioHome> {
     final decoded = jsonDecode(body);
 
     if (decoded is! Map) {
-      throw Exception('???? ???? ????? ????.');
+      throw Exception('پاسخ سرور معتبر نیست.');
     }
 
     return Map<String, dynamic>.from(decoded);
   }
-
-  // =========================
-  // SELECT VIDEO
-  // =========================
 
   Future<void> pickVideo() async {
     try {
@@ -172,7 +148,7 @@ class _StudioHomeState extends State<StudioHome> {
         voiceResult = '';
         voiceFilePath = '';
 
-        status = '????? ?????? ??.';
+        status = 'ویدئو انتخاب شد.';
       });
 
       await controller.initialize();
@@ -184,19 +160,15 @@ class _StudioHomeState extends State<StudioHome> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          status = '??? ?? ?????? ?????: $e';
+          status = 'خطا در انتخاب ویدئو: $e';
         });
       }
     }
   }
 
-  // =========================
-  // UPLOAD VIDEO
-  // =========================
-
   Future<Map<String, dynamic>> uploadVideoForTranscription() async {
     if (videoFile == null) {
-      throw Exception('????? ?? ????? ?????? ??.');
+      throw Exception('ابتدا یک ویدئو انتخاب کنید.');
     }
 
     final request = http.MultipartRequest(
@@ -227,16 +199,12 @@ class _StudioHomeState extends State<StudioHome> {
     if (streamed.statusCode < 200 ||
         streamed.statusCode >= 300) {
       throw Exception(
-        '???? ???? (${streamed.statusCode}): $body',
+        'خطای سرور (${streamed.statusCode}): $body',
       );
     }
 
     return decodeJson(body);
   }
-
-  // =========================
-  // RUN TASK
-  // =========================
 
   Future<void> runTask(
     Future<void> Function() task,
@@ -254,7 +222,7 @@ class _StudioHomeState extends State<StudioHome> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          status = '???: $e';
+          status = 'خطا: $e';
         });
       }
     } finally {
@@ -266,10 +234,6 @@ class _StudioHomeState extends State<StudioHome> {
     }
   }
 
-  // =========================
-  // TRANSCRIBE VIDEO
-  // =========================
-
   Future<void> transcribe() {
     return runTask(() async {
       final data = await uploadVideoForTranscription();
@@ -277,24 +241,20 @@ class _StudioHomeState extends State<StudioHome> {
       final text = (data['text'] ?? '').toString();
 
       if (text.trim().isEmpty) {
-        throw Exception('???? ?? ????? ????? ???? ???.');
+        throw Exception('متنی از ویدئو استخراج نشد.');
       }
 
       setState(() {
         transcript = text;
-        status = '??? ????? ?? ?????? ??????? ??.';
+        status = 'متن ویدئو با موفقیت استخراج شد.';
       });
-    }, '?? ??? ????? ????? ? ????? ????? ?????...');
+    }, 'در حال ارسال ویدئو و استخراج متن...');
   }
-
-  // =========================
-  // GENERATE AI CONTENT
-  // =========================
 
   Future<void> createIdeas() {
     return runTask(() async {
       if (transcript.trim().isEmpty) {
-        throw Exception('????? ??????? ????? ?? ??????? ??.');
+        throw Exception('ابتدا متن ویدئو را استخراج کنید.');
       }
 
       final payload = {
@@ -317,14 +277,14 @@ class _StudioHomeState extends State<StudioHome> {
 
       if (response.statusCode != 200) {
         throw Exception(
-          '???? ????? ????? (${response.statusCode}): $body',
+          'خطای تولید محتوا (${response.statusCode}): $body',
         );
       }
 
       final data = decodeJson(body);
 
       if (data['ok'] != true || data['content'] is! Map) {
-        throw Exception('?????? ???? ??? ?????? ????? ????.');
+        throw Exception('ساختار پاسخ سرور معتبر نیست.');
       }
 
       final content = Map<String, dynamic>.from(
@@ -347,21 +307,17 @@ class _StudioHomeState extends State<StudioHome> {
         caption = captionText;
         hashtags = tagText;
 
-        status = '?????? ???? ? ???? ????? ????.';
+        status = 'محتوای پیشنهادی با موفقیت تولید شد.';
       });
-    }, '??? ?????? ?? ??? ????? ? ????? ?????...');
+    }, 'در حال ساخت ایده و کپشن با هوش مصنوعی...');
   }
-
-  // =========================
-  // TEXT TO SPEECH
-  // =========================
 
   Future<void> createVoice() {
     return runTask(() async {
       final text = voiceController.text.trim();
 
       if (text.isEmpty) {
-        throw Exception('??? ??????? ?? ???? ??.');
+        throw Exception('متن موردنظر را وارد کنید.');
       }
 
       final payload = {
@@ -382,12 +338,12 @@ class _StudioHomeState extends State<StudioHome> {
 
       if (response.statusCode != 200) {
         throw Exception(
-          '???? ????? ??? ?? ???: ${responseText(response)}',
+          'تولید صدا ناموفق بود: ${responseText(response)}',
         );
       }
 
       if (response.bodyBytes.isEmpty) {
-        throw Exception('???? ???? ???? ?????? ??.');
+        throw Exception('فایل صوتی خالی دریافت شد.');
       }
 
       final tempDirectory = Directory.systemTemp;
@@ -408,18 +364,14 @@ class _StudioHomeState extends State<StudioHome> {
         voiceFilePath = audioFile.path;
 
         voiceResult =
-            '???? ???? ?? ?????? ????? ??.\n'
-            '??? ????: ${response.bodyBytes.length} ????\n'
-            '???? ????: ${audioFile.path}';
+            'فایل صوتی با موفقیت ساخته شد.\n'
+            'حجم فایل: ${response.bodyBytes.length} بایت\n'
+            'مسیر فایل: ${audioFile.path}';
 
-        status = '????? ???? ????? ????? ??.';
+        status = 'تولید صدا با موفقیت انجام شد.';
       });
-    }, '?? ??? ???? ???? ?????...');
+    }, 'در حال تولید فایل صوتی...');
   }
-
-  // =========================
-  // GOLD BUTTON
-  // =========================
 
   Widget goldButton(
     String text,
@@ -440,10 +392,6 @@ class _StudioHomeState extends State<StudioHome> {
       ),
     );
   }
-
-  // =========================
-  // VIDEO PREVIEW
-  // =========================
 
   Widget videoPreview() {
     final c = videoController;
@@ -466,7 +414,7 @@ class _StudioHomeState extends State<StudioHome> {
             ),
             SizedBox(height: 10),
             Text(
-              '????????? ?????',
+              'پیش‌نمایش ویدئو',
               style: TextStyle(color: Colors.white70),
             ),
           ],
@@ -482,7 +430,6 @@ class _StudioHomeState extends State<StudioHome> {
           alignment: Alignment.bottomCenter,
           children: [
             VideoPlayer(c),
-
             VideoProgressIndicator(
               c,
               allowScrubbing: true,
@@ -490,7 +437,6 @@ class _StudioHomeState extends State<StudioHome> {
                 playedColor: gold,
               ),
             ),
-
             Align(
               alignment: Alignment.center,
               child: IconButton.filled(
@@ -515,10 +461,6 @@ class _StudioHomeState extends State<StudioHome> {
       ),
     );
   }
-
-  // =========================
-  // FEATURE TILE
-  // =========================
 
   Widget featureTile(
     IconData icon,
@@ -552,35 +494,25 @@ class _StudioHomeState extends State<StudioHome> {
     );
   }
 
-  // =========================
-  // HOME PAGE
-  // =========================
-
   Widget homePage() {
     return ListView(
       padding: const EdgeInsets.all(18),
       children: [
         const Text(
-          '???????? ?????? ????? ????',
+          'استودیوی هوشمند تولید محتوا',
           style: TextStyle(
             fontSize: 21,
             fontWeight: FontWeight.bold,
           ),
         ),
-
         const SizedBox(height: 6),
-
         const Text(
-          '?? ???? ??? ????? ?? ?????? ????? ??????????',
+          'ویدئوهای خود را به محتوای حرفه‌ای تبدیل کنید.',
           style: TextStyle(color: Colors.white60),
         ),
-
         const SizedBox(height: 18),
-
         videoPreview(),
-
         const SizedBox(height: 12),
-
         OutlinedButton.icon(
           onPressed: busy ? null : pickVideo,
           icon: const Icon(
@@ -589,11 +521,10 @@ class _StudioHomeState extends State<StudioHome> {
           ),
           label: Text(
             videoFile == null
-                ? '?????? ????? ?? ????'
-                : '?????? ?????? ????',
+                ? 'انتخاب ویدئو از گوشی'
+                : 'تغییر ویدئوی انتخاب‌شده',
           ),
         ),
-
         if (videoFile != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -606,32 +537,26 @@ class _StudioHomeState extends State<StudioHome> {
               ),
             ),
           ),
-
         const SizedBox(height: 18),
-
         featureTile(
           Icons.subtitles,
-          '??????? ??????',
-          '????? ????? ????? ?? ??? ?????',
+          'زیرنویس هوشمند',
+          'استخراج متن گفتار از روی ویدئو',
           () => setState(() => tab = 1),
         ),
-
         featureTile(
           Icons.graphic_eq,
-          '????? ??? ?? ???',
-          '???? ??????? ????? ?? ???? ?? ? ???',
+          'تبدیل متن به صدا',
+          'تولید فایل صوتی با صدای فارسی',
           () => setState(() => tab = 2),
         ),
-
         featureTile(
           Icons.lightbulb_outline,
-          '???? ? ???? ??????',
-          '???? ????? ??????? ???? ? ????',
+          'ایده و تولید محتوا',
+          'تولید عنوان، کپشن و هشتگ',
           () => setState(() => tab = 3),
         ),
-
         const SizedBox(height: 14),
-
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -660,53 +585,41 @@ class _StudioHomeState extends State<StudioHome> {
     );
   }
 
-  // =========================
-  // SUBTITLE PAGE
-  // =========================
-
   Widget captionsPage() {
     return ListView(
       padding: const EdgeInsets.all(18),
       children: [
         const Text(
-          '??????? ?????? ?????',
+          'استخراج زیرنویس و متن',
           style: TextStyle(
             fontSize: 21,
             fontWeight: FontWeight.bold,
           ),
         ),
-
         const SizedBox(height: 8),
-
         const Text(
-          '???? ????? ?? ????? ????? ????? ?? ??? ????? ????? ??????.',
+          'گفتار موجود در ویدئو را به متن فارسی تبدیل کنید.',
           style: TextStyle(color: Colors.white60),
         ),
-
         const SizedBox(height: 18),
-
         goldButton(
-          '??????? ??????? ?? ?????',
+          'استخراج زیرنویس از ویدئو',
           videoFile == null ? null : transcribe,
           icon: Icons.subtitles,
         ),
-
         const SizedBox(height: 16),
-
         TextFormField(
           initialValue: transcript,
           key: ValueKey(transcript),
           maxLines: 10,
           onChanged: (v) => transcript = v,
           decoration: const InputDecoration(
-            hintText: '??? ????? ???????? ????? ????? ???? ??????...',
+            hintText: 'متن استخراج‌شده یا متن دلخواه خود را وارد کنید...',
           ),
         ),
-
         const SizedBox(height: 12),
-
         const Text(
-          '?? ?? ???????? ???????? ??? ?? ?????? ???.',
+          'می‌توانید متن استخراج‌شده را ویرایش کنید.',
           style: TextStyle(
             color: Colors.white54,
             fontSize: 12,
@@ -716,51 +629,39 @@ class _StudioHomeState extends State<StudioHome> {
     );
   }
 
-  // =========================
-  // VOICE PAGE
-  // =========================
-
   Widget voicePage() {
     return ListView(
       padding: const EdgeInsets.all(18),
       children: [
         const Text(
-          '???????? ????? ??? ?? ???',
+          'تبدیل متن به صدای فارسی',
           style: TextStyle(
             fontSize: 21,
             fontWeight: FontWeight.bold,
           ),
         ),
-
         const SizedBox(height: 8),
-
         const Text(
-          '??? ??????? ?? ????? ?? ?? ???? ????? ????? ???.',
+          'متن دلخواه خود را وارد کنید تا به صدا تبدیل شود.',
           style: TextStyle(color: Colors.white60),
         ),
-
         const SizedBox(height: 16),
-
         TextField(
           controller: voiceController,
           maxLines: 7,
           decoration: const InputDecoration(
-            hintText: '??? ??????? ???? ??????? ?? ???? ??...',
+            hintText: 'متن موردنظر برای تبدیل به صدا را بنویسید...',
           ),
         ),
-
         const SizedBox(height: 16),
-
         const Text(
-          '?????? ???? ??????',
+          'انتخاب صدای گوینده',
           style: TextStyle(
             color: gold,
             fontWeight: FontWeight.bold,
           ),
         ),
-
         const SizedBox(height: 8),
-
         DropdownButtonFormField<String>(
           value: selectedVoice,
           decoration: const InputDecoration(
@@ -769,11 +670,11 @@ class _StudioHomeState extends State<StudioHome> {
           items: const [
             DropdownMenuItem(
               value: 'fa-IR-FaridNeural',
-              child: Text('???? ???'),
+              child: Text('صدای مرد'),
             ),
             DropdownMenuItem(
               value: 'fa-IR-DilaraNeural',
-              child: Text('???? ??'),
+              child: Text('صدای زن'),
             ),
           ],
           onChanged: busy
@@ -786,15 +687,12 @@ class _StudioHomeState extends State<StudioHome> {
                   }
                 },
         ),
-
         const SizedBox(height: 16),
-
         goldButton(
-          '????? ???? ????',
+          'تولید فایل صوتی',
           createVoice,
           icon: Icons.graphic_eq,
         ),
-
         if (voiceResult.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 18),
@@ -816,118 +714,88 @@ class _StudioHomeState extends State<StudioHome> {
     );
   }
 
-  // =========================
-  // AI PAGE
-  // =========================
-
   Widget aiPage() {
     return ListView(
       padding: const EdgeInsets.all(18),
       children: [
         const Text(
-          '?????? ?????? ?????',
+          'تولید محتوای هوشمند',
           style: TextStyle(
             fontSize: 21,
             fontWeight: FontWeight.bold,
           ),
         ),
-
         const SizedBox(height: 8),
-
         const Text(
-          '?? ??????? ?? ??????? ? ??????? ????????? '
-          '???? ? ???? ????? ????? ????? ??????.',
+          'با استفاده از متن ویدئو، عنوان، ایده و کپشن مناسب تولید کنید.',
           style: TextStyle(color: Colors.white60),
         ),
-
         const SizedBox(height: 16),
-
         goldButton(
-          '????? ????? ? ???? ???? ? ????',
+          'تولید ایده، کپشن و هشتگ',
           transcript.trim().isEmpty ? null : createIdeas,
           icon: Icons.auto_awesome,
         ),
-
         const SizedBox(height: 18),
-
         if (topic.isNotEmpty) ...[
           const Text(
-            '????? ?????',
+            'عنوان پیشنهادی',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
               color: gold,
             ),
           ),
-
           const SizedBox(height: 8),
-
           SelectableText(topic),
-
           const SizedBox(height: 18),
         ],
-
         if (ideas.isNotEmpty) ...[
           const Text(
-            '???? ????????',
+            'ایده پیشنهادی',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
               color: gold,
             ),
           ),
-
           const SizedBox(height: 8),
-
           SelectableText(ideas),
-
           const SizedBox(height: 18),
         ],
-
         if (caption.isNotEmpty) ...[
           const Text(
-            '???? ????????',
+            'متن کپشن',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
               color: gold,
             ),
           ),
-
           const SizedBox(height: 8),
-
           SelectableText(caption),
-
           const SizedBox(height: 18),
         ],
-
         if (hashtags.isNotEmpty) ...[
           const Text(
-            '???????',
+            'هشتگ‌ها',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
               color: gold,
             ),
           ),
-
           const SizedBox(height: 8),
-
           SelectableText(hashtags),
         ],
-
         if (ideas.isEmpty && caption.isEmpty)
           const Text(
-            '?? ?? ??????? ???????? ???? ? ???? ????? ????? ???? ??????.',
+            'برای استفاده از این بخش ابتدا متن ویدئو را استخراج کنید.',
             style: TextStyle(color: Colors.white54),
           ),
       ],
     );
   }
-
-  // =========================
-  // BUILD
-  // =========================
 
   @override
   Widget build(BuildContext context) {
@@ -972,7 +840,6 @@ class _StudioHomeState extends State<StudioHome> {
             ),
           ],
         ),
-
         body: SafeArea(
           child: Stack(
             children: [
@@ -980,7 +847,6 @@ class _StudioHomeState extends State<StudioHome> {
                 index: tab,
                 children: pages,
               ),
-
               if (busy)
                 Container(
                   color: Colors.black54,
@@ -1009,7 +875,6 @@ class _StudioHomeState extends State<StudioHome> {
             ],
           ),
         ),
-
         bottomNavigationBar: NavigationBar(
           backgroundColor: panel,
           indicatorColor: gold.withOpacity(.18),
@@ -1026,34 +891,31 @@ class _StudioHomeState extends State<StudioHome> {
                 Icons.home,
                 color: gold,
               ),
-              label: '????',
+              label: 'خانه',
             ),
-
             NavigationDestination(
               icon: Icon(Icons.subtitles_outlined),
               selectedIcon: Icon(
                 Icons.subtitles,
                 color: gold,
               ),
-              label: '???????',
+              label: 'زیرنویس',
             ),
-
             NavigationDestination(
               icon: Icon(Icons.record_voice_over_outlined),
               selectedIcon: Icon(
                 Icons.record_voice_over,
                 color: gold,
               ),
-              label: '???',
+              label: 'صدا',
             ),
-
             NavigationDestination(
               icon: Icon(Icons.psychology_outlined),
               selectedIcon: Icon(
                 Icons.psychology,
                 color: gold,
               ),
-              label: '??? ??????',
+              label: 'هوش مصنوعی',
             ),
           ],
         ),
