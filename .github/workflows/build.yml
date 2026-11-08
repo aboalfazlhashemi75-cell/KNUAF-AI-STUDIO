@@ -14,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout source
         uses: actions/checkout@v4
 
@@ -25,27 +24,20 @@ jobs:
           cache: true
 
       - name: Generate Android project files
-        run: flutter create --platforms=android --org com.knuafhashemi .
+        run: flutter create --project-name knuaf_ai_studio --platforms=android --org com.knuafhashemi .
 
       - name: Add Android Internet Permission
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path(
-              "android/app/src/main/AndroidManifest.xml"
-          )
-
+          path = Path("android/app/src/main/AndroidManifest.xml")
           content = path.read_text(encoding="utf-8")
 
-          permission = (
-              '<uses-permission '
-              'android:name="android.permission.INTERNET"/>'
-          )
+          permission = '<uses-permission android:name="android.permission.INTERNET"/>'
 
           if permission not in content:
               position = content.find(">")
-
               if position == -1:
                   raise Exception("Invalid AndroidManifest.xml")
 
@@ -56,28 +48,22 @@ jobs:
                   + content[position + 1:]
               )
 
-              path.write_text(
-                  content,
-                  encoding="utf-8"
-              )
+              path.write_text(content, encoding="utf-8")
 
-          print("INTERNET permission is enabled")
+          print("Internet permission enabled successfully")
           PY
 
       - name: Verify Internet Permission
         run: |
-          grep "android.permission.INTERNET" \
-          android/app/src/main/AndroidManifest.xml
+          grep "android.permission.INTERNET" android/app/src/main/AndroidManifest.xml
 
       - name: Get dependencies
         run: flutter pub get
 
       - name: Build release APK
-        env:
-          KNUAF_API_URL: ${{ vars.KNUAF_API_URL }}
         run: |
           flutter build apk --release \
-            --dart-define=KNUAF_API_URL="${KNUAF_API_URL:-https://knuaf-ai-studio.fastapicloud.dev}"
+            --dart-define=KNUAF_API_URL=https://knuaf-ai-studio.fastapicloud.dev
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
