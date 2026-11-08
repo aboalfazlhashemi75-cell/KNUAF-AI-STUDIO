@@ -73,12 +73,12 @@ class AvhaHome extends StatefulWidget {
 
 class _AvhaHomeState extends State<AvhaHome> {
   int tab = 0;
-  String workspace = 'Ø´Ø®ØµÛŒ';
+  String workspace = 'شخصی';
 
   File? videoFile;
   VideoPlayerController? videoController;
   bool busy = false;
-  String status = 'Ø¨Ø±Ø§ÛŒ Ø´Ø±ÙˆØ¹ØŒ ÛŒÚ© ÙˆÛŒØ¯Ø¦Ùˆ Ø§Ù†ØªØ®Ø§Ø¨ Ú©Ù†ÛŒØ¯.';
+  String status = 'برای شروع، یک ویدئو انتخاب کنید.';
 
   String transcript = '';
   String ideas = '';
@@ -95,11 +95,11 @@ class _AvhaHomeState extends State<AvhaHome> {
   bool darkTheme = true;
   bool autoSave = true;
   bool notifications = true;
-  String accentChoice = 'Ø·Ù„Ø§ÛŒÛŒ';
-  String language = 'ÙØ§Ø±Ø³ÛŒ';
+  String accentChoice = 'طلایی';
+  String language = 'فارسی';
   String outputQuality = '1080p';
   String aspectRatio = '9:16';
-  String aiTone = 'Ø¯ÙˆØ³ØªØ§Ù†Ù‡';
+  String aiTone = 'دوستانه';
 
   @override
   void dispose() {
@@ -113,7 +113,7 @@ class _AvhaHomeState extends State<AvhaHome> {
 
   Map<String, dynamic> decodeJson(String body) {
     final decoded = jsonDecode(body);
-    if (decoded is! Map) throw Exception('Ù¾Ø§Ø³Ø® Ø³Ø±ÙˆØ± Ù…Ø¹ØªØ¨Ø± Ù†ÛŒØ³Øª.');
+    if (decoded is! Map) throw Exception('پاسخ سرور معتبر نیست.');
     return Map<String, dynamic>.from(decoded);
   }
 
@@ -126,7 +126,7 @@ class _AvhaHomeState extends State<AvhaHome> {
     try {
       await task();
     } catch (e) {
-      if (mounted) setState(() => status = 'Ø®Ø·Ø§: $e');
+      if (mounted) setState(() => status = 'خطا: $e');
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -152,19 +152,19 @@ class _AvhaHomeState extends State<AvhaHome> {
         hashtags = '';
         voiceResult = '';
         voiceFilePath = '';
-        status = 'ÙˆÛŒØ¯Ø¦Ùˆ Ø§Ù†ØªØ®Ø§Ø¨ Ø´Ø¯.';
+        status = 'ویدئو انتخاب شد.';
         tab = 0;
       });
       await controller.initialize();
       await controller.setLooping(true);
       if (mounted) setState(() {});
     } catch (e) {
-      if (mounted) setState(() => status = 'Ø®Ø·Ø§ Ø¯Ø± Ø§Ù†ØªØ®Ø§Ø¨ ÙˆÛŒØ¯Ø¦Ùˆ: $e');
+      if (mounted) setState(() => status = 'خطا در انتخاب ویدئو: $e');
     }
   }
 
   Future<Map<String, dynamic>> uploadVideoForTranscription() async {
-    if (videoFile == null) throw Exception('Ø§Ø¨ØªØ¯Ø§ ÛŒÚ© ÙˆÛŒØ¯Ø¦Ùˆ Ø§Ù†ØªØ®Ø§Ø¨ Ú©Ù†ÛŒØ¯.');
+    if (videoFile == null) throw Exception('ابتدا یک ویدئو انتخاب کنید.');
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$apiBaseUrl/transcribe'),
@@ -174,7 +174,7 @@ class _AvhaHomeState extends State<AvhaHome> {
     final streamed = await request.send().timeout(const Duration(minutes: 10));
     final body = utf8.decode(await streamed.stream.toBytes(), allowMalformed: true);
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-      throw Exception('Ø®Ø·Ø§ÛŒ Ø³Ø±ÙˆØ± (${streamed.statusCode}): $body');
+      throw Exception('خطای سرور (${streamed.statusCode}): $body');
     }
     return decodeJson(body);
   }
@@ -182,16 +182,16 @@ class _AvhaHomeState extends State<AvhaHome> {
   Future<void> transcribe() => runTask(() async {
         final data = await uploadVideoForTranscription();
         final text = (data['text'] ?? '').toString();
-        if (text.trim().isEmpty) throw Exception('Ù…ØªÙ†ÛŒ Ø§Ø² ÙˆÛŒØ¯Ø¦Ùˆ Ø§Ø³ØªØ®Ø±Ø§Ø¬ Ù†Ø´Ø¯.');
+        if (text.trim().isEmpty) throw Exception('متنی از ویدئو استخراج نشد.');
         setState(() {
           transcript = text;
-          status = 'Ù…ØªÙ† ÙˆÛŒØ¯Ø¦Ùˆ Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø§Ø³ØªØ®Ø±Ø§Ø¬ Ø´Ø¯.';
+          status = 'متن ویدئو با موفقیت استخراج شد.';
         });
-      }, 'Ø¯Ø± Ø­Ø§Ù„ Ø§Ø³ØªØ®Ø±Ø§Ø¬ Ú¯ÙØªØ§Ø± ÙˆÛŒØ¯Ø¦Ùˆ...');
+      }, 'در حال استخراج گفتار ویدئو...');
 
   Future<void> createIdeas() => runTask(() async {
         if (transcript.trim().isEmpty) {
-          throw Exception('Ø§Ø¨ØªØ¯Ø§ Ù…ØªÙ† ÙˆÛŒØ¯Ø¦Ùˆ Ø±Ø§ Ø§Ø³ØªØ®Ø±Ø§Ø¬ ÛŒØ§ ÙˆØ§Ø±Ø¯ Ú©Ù†ÛŒØ¯.');
+          throw Exception('ابتدا متن ویدئو را استخراج یا وارد کنید.');
         }
         final response = await http
             .post(
@@ -202,17 +202,17 @@ class _AvhaHomeState extends State<AvhaHome> {
               },
               body: utf8.encode(jsonEncode({
                 'transcript': transcript.trim(),
-                'business': workspace == 'Ú©Ø§Ø±ÛŒ' ? 'AVHA Business' : 'AVHA Personal',
+                'business': workspace == 'کاری' ? 'AVHA Business' : 'AVHA Personal',
               })),
             )
             .timeout(const Duration(minutes: 3));
         final body = responseText(response);
         if (response.statusCode != 200) {
-          throw Exception('Ø®Ø·Ø§ÛŒ ØªÙˆÙ„ÛŒØ¯ Ù…Ø­ØªÙˆØ§ (${response.statusCode}): $body');
+          throw Exception('خطای تولید محتوا (${response.statusCode}): $body');
         }
         final data = decodeJson(body);
         if (data['ok'] != true || data['content'] is! Map) {
-          throw Exception('Ø³Ø§Ø®ØªØ§Ø± Ù¾Ø§Ø³Ø® Ø³Ø±ÙˆØ± Ù…Ø¹ØªØ¨Ø± Ù†ÛŒØ³Øª.');
+          throw Exception('ساختار پاسخ سرور معتبر نیست.');
         }
         final content = Map<String, dynamic>.from(data['content']);
         final tags = content['hashtags'];
@@ -221,13 +221,13 @@ class _AvhaHomeState extends State<AvhaHome> {
           ideas = (content['idea'] ?? '').toString();
           caption = (content['caption'] ?? '').toString();
           hashtags = tags is List ? tags.join('  ') : '';
-          status = 'Ø§ÛŒØ¯Ù‡ Ùˆ Ú©Ù¾Ø´Ù† Ø¢Ù…Ø§Ø¯Ù‡ Ø´Ø¯.';
+          status = 'ایده و کپشن آماده شد.';
         });
-      }, 'Ø¯Ø± Ø­Ø§Ù„ Ø³Ø§Ø®Øª Ø§ÛŒØ¯Ù‡ Ùˆ Ú©Ù¾Ø´Ù† Ø¨Ø§ Ù‡ÙˆØ´ Ù…ØµÙ†ÙˆØ¹ÛŒ...');
+      }, 'در حال ساخت ایده و کپشن با هوش مصنوعی...');
 
   Future<void> createVoice() => runTask(() async {
         final text = voiceController.text.trim();
-        if (text.isEmpty) throw Exception('Ù…ØªÙ† Ù…ÙˆØ±Ø¯Ù†Ø¸Ø± Ø±Ø§ ÙˆØ§Ø±Ø¯ Ú©Ù†ÛŒØ¯.');
+        if (text.isEmpty) throw Exception('متن موردنظر را وارد کنید.');
         final response = await http
             .post(
               Uri.parse('$apiBaseUrl/tts'),
@@ -242,9 +242,9 @@ class _AvhaHomeState extends State<AvhaHome> {
             )
             .timeout(const Duration(minutes: 3));
         if (response.statusCode != 200) {
-          throw Exception('ØªÙˆÙ„ÛŒØ¯ ØµØ¯Ø§ Ù†Ø§Ù…ÙˆÙÙ‚ Ø¨ÙˆØ¯: ${responseText(response)}');
+          throw Exception('تولید صدا ناموفق بود: ${responseText(response)}');
         }
-        if (response.bodyBytes.isEmpty) throw Exception('ÙØ§ÛŒÙ„ ØµÙˆØªÛŒ Ø®Ø§Ù„ÛŒ Ø§Ø³Øª.');
+        if (response.bodyBytes.isEmpty) throw Exception('فایل صوتی خالی است.');
         final dir = Directory.systemTemp;
         final file = File(
           '${dir.path}${Platform.pathSeparator}avha_audio_${DateTime.now().millisecondsSinceEpoch}.mp3',
@@ -252,10 +252,10 @@ class _AvhaHomeState extends State<AvhaHome> {
         await file.writeAsBytes(response.bodyBytes, flush: true);
         setState(() {
           voiceFilePath = file.path;
-          voiceResult = 'ÙØ§ÛŒÙ„ ØµÙˆØªÛŒ Ø³Ø§Ø®ØªÙ‡ Ø´Ø¯.\nÙ…Ø³ÛŒØ± Ù…ÙˆÙ‚Øª: ${file.path}';
-          status = 'ØªÙˆÙ„ÛŒØ¯ ØµØ¯Ø§ Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø§Ù†Ø¬Ø§Ù… Ø´Ø¯.';
+          voiceResult = 'فایل صوتی ساخته شد.\nمسیر موقت: ${file.path}';
+          status = 'تولید صدا با موفقیت انجام شد.';
         });
-      }, 'Ø¯Ø± Ø­Ø§Ù„ ØªÙˆÙ„ÛŒØ¯ ÙØ§ÛŒÙ„ ØµÙˆØªÛŒ...');
+      }, 'در حال تولید فایل صوتی...');
 
   void go(int index) => setState(() => tab = index);
 
@@ -306,7 +306,7 @@ class _AvhaHomeState extends State<AvhaHome> {
           children: [
             Icon(Icons.video_library_outlined, size: 48, color: gold),
             SizedBox(height: 9),
-            Text('Ù¾ÛŒØ´â€ŒÙ†Ù…Ø§ÛŒØ´ ÙˆÛŒØ¯Ø¦Ùˆ', style: TextStyle(color: Colors.white70)),
+            Text('پیش‌نمایش ویدئو', style: TextStyle(color: Colors.white70)),
           ],
         ),
       );
@@ -338,7 +338,7 @@ class _AvhaHomeState extends State<AvhaHome> {
   Widget modeCard(String title, String subtitle, IconData icon, Color color) => InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () => setState(() {
-          workspace = title == 'ÙØ¶Ø§ÛŒ Ú©Ø§Ø±ÛŒ' ? 'Ú©Ø§Ø±ÛŒ' : 'Ø´Ø®ØµÛŒ';
+          workspace = title == 'فضای کاری' ? 'کاری' : 'شخصی';
           tab = 0;
         }),
         child: Container(
@@ -362,7 +362,7 @@ class _AvhaHomeState extends State<AvhaHome> {
               Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.white60)),
               const SizedBox(height: 12),
               Row(children: [
-                Text('ÙˆØ±ÙˆØ¯ Ø¨Ù‡ ÙØ¶Ø§', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                Text('ورود به فضا', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
                 const Icon(Icons.chevron_left, size: 18),
               ]),
             ],
@@ -382,16 +382,16 @@ class _AvhaHomeState extends State<AvhaHome> {
                 ]),
               ),
               IconButton(
-                tooltip: 'ØªÙ†Ø¸ÛŒÙ…Ø§Øª',
+                tooltip: 'تنظیمات',
                 onPressed: () => go(4),
                 icon: const Icon(Icons.settings_outlined, color: gold, size: 27),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          Text('Ø³Ù„Ø§Ù…ØŒ Ú©Ø§Ø±Ø¨Ø± Ø¹Ø²ÛŒØ² ðŸ‘‹', style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
+          Text('سلام، کاربر عزیز 👋', style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
           const SizedBox(height: 5),
-          const Text('Ø¨Ù‡ AVHA Ø®ÙˆØ´ Ø¢Ù…Ø¯ÛŒØ› Ø¢Ù…Ø§Ø¯Ù‡â€ŒØ§ÛŒ Ú†ÛŒØ²ÛŒ Ù…ØªÙØ§ÙˆØª Ø®Ù„Ù‚ Ú©Ù†ÛŒØŸ',
+          const Text('به AVHA خوش آمدی؛ آماده‌ای چیزی متفاوت خلق کنی؟',
               style: TextStyle(color: Colors.white60)),
           const SizedBox(height: 18),
           card(
@@ -399,34 +399,34 @@ class _AvhaHomeState extends State<AvhaHome> {
               const Icon(Icons.auto_awesome, size: 42, color: purple),
               const SizedBox(width: 13),
               const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Ù‚Ø¯Ø±Øª Ù‡ÙˆØ´ Ù…ØµÙ†ÙˆØ¹ÛŒ Ø¯Ø± Ø¯Ø³ØªØ§Ù† ØªÙˆ', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('قدرت هوش مصنوعی در دستان تو', style: TextStyle(fontWeight: FontWeight.bold)),
                 SizedBox(height: 4),
-                Text('Ø§ÛŒØ¯Ù‡â€ŒÙ¾Ø±Ø¯Ø§Ø²ÛŒØŒ Ù…ØªÙ† Ùˆ ØªÙˆÙ„ÛŒØ¯ Ù…Ø­ØªÙˆØ§ÛŒ Ù‡ÙˆØ´Ù…Ù†Ø¯', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                Text('ایده‌پردازی، متن و تولید محتوای هوشمند', style: TextStyle(color: Colors.white60, fontSize: 12)),
               ])),
               const Icon(Icons.arrow_forward_ios, size: 16, color: gold),
             ]),
           ),
           const SizedBox(height: 18),
           Row(children: [
-            Expanded(child: modeCard('ÙØ¶Ø§ÛŒ Ø´Ø®ØµÛŒ', 'ÙˆÙ„Ø§Ú¯ØŒ Ø³ÙØ± Ùˆ Ø´Ø¨Ú©Ù‡â€ŒÙ‡Ø§ÛŒ Ø§Ø¬ØªÙ…Ø§Ø¹ÛŒ', Icons.person_outline, blue)),
+            Expanded(child: modeCard('فضای شخصی', 'ولاگ، سفر و شبکه‌های اجتماعی', Icons.person_outline, blue)),
             const SizedBox(width: 12),
-            Expanded(child: modeCard('ÙØ¶Ø§ÛŒ Ú©Ø§Ø±ÛŒ', 'Ù¾Ø±ÙˆÚ˜Ù‡â€ŒÙ‡Ø§ Ùˆ Ù…Ø­ØªÙˆØ§ÛŒ Ú©Ø³Ø¨â€ŒÙˆÚ©Ø§Ø±', Icons.business_center_outlined, gold)),
+            Expanded(child: modeCard('فضای کاری', 'پروژه‌ها و محتوای کسب‌وکار', Icons.business_center_outlined, gold)),
           ]),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: () => go(6),
             icon: const Icon(Icons.folder_open, color: gold),
-            label: const Text('Ù¾Ø±ÙˆÚ˜Ù‡â€ŒÙ‡Ø§ÛŒ Ù…Ù†'),
+            label: const Text('پروژه‌های من'),
           ),
           const SizedBox(height: 22),
-          const Text('Ø´Ø±ÙˆØ¹ Ø³Ø±ÛŒØ¹', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('شروع سریع', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           card(child: Column(children: [
             Row(children: [
               const Icon(Icons.video_library_outlined, color: gold, size: 30),
               const SizedBox(width: 10),
-              const Expanded(child: Text('ÙˆÛŒØ¯Ø¦ÙˆÛŒ Ø®ÙˆØ¯ Ø±Ø§ Ø§Ù†ØªØ®Ø§Ø¨ Ú©Ù†')),
-              TextButton(onPressed: busy ? null : pickVideo, child: const Text('Ø§Ù†ØªØ®Ø§Ø¨ ÙˆÛŒØ¯Ø¦Ùˆ')),
+              const Expanded(child: Text('ویدئوی خود را انتخاب کن')),
+              TextButton(onPressed: busy ? null : pickVideo, child: const Text('انتخاب ویدئو')),
             ]),
             if (videoFile != null) ...[
               const SizedBox(height: 10),
@@ -436,15 +436,15 @@ class _AvhaHomeState extends State<AvhaHome> {
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white54, fontSize: 11)),
               const SizedBox(height: 10),
-              goldButton('Ø±ÙØªÙ† Ø¨Ù‡ Ù…Ø­ÛŒØ· ØªØ¯ÙˆÛŒÙ†', () => go(5), icon: Icons.movie_edit),
+              goldButton('رفتن به محیط تدوین', () => go(5), icon: Icons.movie_edit),
             ],
           ])),
           const SizedBox(height: 18),
-          const Text('Ø§Ø¨Ø²Ø§Ø±Ù‡Ø§ÛŒ Ù‡ÙˆØ´Ù…Ù†Ø¯', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('ابزارهای هوشمند', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          featureRow(Icons.subtitles, 'Ø²ÛŒØ±Ù†ÙˆÛŒØ³ Ù‡ÙˆØ´Ù…Ù†Ø¯', 'ØªØ¨Ø¯ÛŒÙ„ Ú¯ÙØªØ§Ø± ÙˆÛŒØ¯Ø¦Ùˆ Ø¨Ù‡ Ù…ØªÙ†', () => go(1), blue),
-          featureRow(Icons.graphic_eq, 'Ù…ØªÙ† Ø¨Ù‡ Ú¯ÙØªØ§Ø±', 'ØªÙˆÙ„ÛŒØ¯ ØµØ¯Ø§ÛŒ ÙØ§Ø±Ø³ÛŒ', () => go(2), purple),
-          featureRow(Icons.lightbulb_outline, 'Ø§ÛŒØ¯Ù‡ Ùˆ Ú©Ù¾Ø´Ù†', 'Ø¹Ù†ÙˆØ§Ù†ØŒ Ø³Ù†Ø§Ø±ÛŒÙˆØŒ Ú©Ù¾Ø´Ù† Ùˆ Ù‡Ø´ØªÚ¯', () => go(3), gold),
+          featureRow(Icons.subtitles, 'زیرنویس هوشمند', 'تبدیل گفتار ویدئو به متن', () => go(1), blue),
+          featureRow(Icons.graphic_eq, 'متن به گفتار', 'تولید صدای فارسی', () => go(2), purple),
+          featureRow(Icons.lightbulb_outline, 'ایده و کپشن', 'عنوان، سناریو، کپشن و هشتگ', () => go(3), gold),
           const SizedBox(height: 14),
           card(child: Row(children: [
             const Icon(Icons.info_outline, color: gold),
@@ -473,16 +473,16 @@ class _AvhaHomeState extends State<AvhaHome> {
   Widget captionsPage() => ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          sectionTitle('Ø²ÛŒØ±Ù†ÙˆÛŒØ³ Ù‡ÙˆØ´Ù…Ù†Ø¯', subtitle: 'Ú¯ÙØªØ§Ø± ÙˆÛŒØ¯Ø¦Ùˆ Ø±Ø§ Ø¨Ù‡ Ù…ØªÙ† ÙØ§Ø±Ø³ÛŒ ØªØ¨Ø¯ÛŒÙ„ Ùˆ Ø³Ù¾Ø³ ÙˆÛŒØ±Ø§ÛŒØ´ Ú©Ù†.'),
+          sectionTitle('زیرنویس هوشمند', subtitle: 'گفتار ویدئو را به متن فارسی تبدیل و سپس ویرایش کن.'),
           card(child: Column(children: [
-            goldButton('Ø§Ø³ØªØ®Ø±Ø§Ø¬ Ù…ØªÙ† Ø§Ø² ÙˆÛŒØ¯Ø¦Ùˆ', videoFile == null ? null : transcribe, icon: Icons.subtitles),
+            goldButton('استخراج متن از ویدئو', videoFile == null ? null : transcribe, icon: Icons.subtitles),
             const SizedBox(height: 12),
             TextFormField(
               key: ValueKey(transcript),
               initialValue: transcript,
               maxLines: 10,
               onChanged: (v) => transcript = v,
-              decoration: const InputDecoration(hintText: 'Ù…ØªÙ† Ø§Ø³ØªØ®Ø±Ø§Ø¬â€ŒØ´Ø¯Ù‡ ÛŒØ§ Ù…ØªÙ† Ø¯Ù„Ø®ÙˆØ§Ù‡ Ø±Ø§ ÙˆØ§Ø±Ø¯ Ú©Ù†...'),
+              decoration: const InputDecoration(hintText: 'متن استخراج‌شده یا متن دلخواه را وارد کن...'),
             ),
           ])),
         ],
@@ -491,24 +491,24 @@ class _AvhaHomeState extends State<AvhaHome> {
   Widget voicePage() => ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          sectionTitle('ØªØ¨Ø¯ÛŒÙ„ Ù…ØªÙ† Ø¨Ù‡ ØµØ¯Ø§', subtitle: 'Ù…ØªÙ† Ø®ÙˆØ¯ Ø±Ø§ Ø¨Ø§ ØµØ¯Ø§ÛŒ ÙØ§Ø±Ø³ÛŒ Ø¨Ù‡ ÙØ§ÛŒÙ„ ØµÙˆØªÛŒ ØªØ¨Ø¯ÛŒÙ„ Ú©Ù†.'),
+          sectionTitle('تبدیل متن به صدا', subtitle: 'متن خود را با صدای فارسی به فایل صوتی تبدیل کن.'),
           TextField(
             controller: voiceController,
             maxLines: 7,
-            decoration: const InputDecoration(hintText: 'Ù…ØªÙ† Ù…ÙˆØ±Ø¯Ù†Ø¸Ø± Ø¨Ø±Ø§ÛŒ ØªØ¨Ø¯ÛŒÙ„ Ø¨Ù‡ ØµØ¯Ø§...'),
+            decoration: const InputDecoration(hintText: 'متن موردنظر برای تبدیل به صدا...'),
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
             value: selectedVoice,
-            decoration: const InputDecoration(labelText: 'ØµØ¯Ø§ÛŒ Ú¯ÙˆÛŒÙ†Ø¯Ù‡'),
+            decoration: const InputDecoration(labelText: 'صدای گوینده'),
             items: const [
-              DropdownMenuItem(value: 'fa-IR-FaridNeural', child: Text('ØµØ¯Ø§ÛŒ Ù…Ø±Ø¯')),
-              DropdownMenuItem(value: 'fa-IR-DilaraNeural', child: Text('ØµØ¯Ø§ÛŒ Ø²Ù†')),
+              DropdownMenuItem(value: 'fa-IR-FaridNeural', child: Text('صدای مرد')),
+              DropdownMenuItem(value: 'fa-IR-DilaraNeural', child: Text('صدای زن')),
             ],
             onChanged: (v) { if (v != null) setState(() => selectedVoice = v); },
           ),
           const SizedBox(height: 14),
-          goldButton('ØªÙˆÙ„ÛŒØ¯ ÙØ§ÛŒÙ„ ØµÙˆØªÛŒ', createVoice, icon: Icons.graphic_eq),
+          goldButton('تولید فایل صوتی', createVoice, icon: Icons.graphic_eq),
           if (voiceResult.isNotEmpty) ...[
             const SizedBox(height: 14),
             card(child: SelectableText(voiceResult, style: const TextStyle(color: gold))),
@@ -519,24 +519,24 @@ class _AvhaHomeState extends State<AvhaHome> {
   Widget aiPage() => ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          sectionTitle('Ø§Ø³ØªÙˆØ¯ÛŒÙˆÛŒ Ù‡ÙˆØ´Ù…Ù†Ø¯ AI', subtitle: 'Ø¨Ø±Ø§ÛŒ ÙØ¶Ø§ÛŒ ${workspace == 'Ú©Ø§Ø±ÛŒ' ? 'Ú©Ø§Ø±ÛŒ' : 'Ø´Ø®ØµÛŒ'} Ù…Ø­ØªÙˆØ§ÛŒ Ù…Ù†Ø§Ø³Ø¨ Ø¨Ø³Ø§Ø².'),
+          sectionTitle('استودیوی هوشمند AI', subtitle: 'برای فضای ${workspace == 'کاری' ? 'کاری' : 'شخصی'} محتوای مناسب بساز.'),
           card(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const Icon(Icons.psychology_alt, color: purple, size: 48),
             const SizedBox(height: 8),
-            const Text('ØªÙˆÙ„ÛŒØ¯ Ø§ÛŒØ¯Ù‡ØŒ Ø³Ù†Ø§Ø±ÛŒÙˆØŒ Ú©Ù¾Ø´Ù† Ùˆ Ù‡Ø´ØªÚ¯', textAlign: TextAlign.center,
+            const Text('تولید ایده، سناریو، کپشن و هشتگ', textAlign: TextAlign.center,
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 14),
-            goldButton('Ø³Ø§Ø®Øª Ù…Ø­ØªÙˆØ§ÛŒ Ù¾ÛŒØ´Ù†Ù‡Ø§Ø¯ÛŒ', transcript.trim().isEmpty ? null : createIdeas),
+            goldButton('ساخت محتوای پیشنهادی', transcript.trim().isEmpty ? null : createIdeas),
           ])),
           const SizedBox(height: 14),
-          if (topic.isNotEmpty) resultCard('Ø¹Ù†ÙˆØ§Ù† Ù¾ÛŒØ´Ù†Ù‡Ø§Ø¯ÛŒ', topic),
-          if (ideas.isNotEmpty) resultCard('Ø§ÛŒØ¯Ù‡ Ùˆ Ø³Ù†Ø§Ø±ÛŒÙˆ', ideas),
-          if (caption.isNotEmpty) resultCard('Ú©Ù¾Ø´Ù†', caption),
-          if (hashtags.isNotEmpty) resultCard('Ù‡Ø´ØªÚ¯â€ŒÙ‡Ø§', hashtags),
+          if (topic.isNotEmpty) resultCard('عنوان پیشنهادی', topic),
+          if (ideas.isNotEmpty) resultCard('ایده و سناریو', ideas),
+          if (caption.isNotEmpty) resultCard('کپشن', caption),
+          if (hashtags.isNotEmpty) resultCard('هشتگ‌ها', hashtags),
           if (transcript.trim().isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 15),
-              child: Text('Ø§Ø¨ØªØ¯Ø§ Ø§Ø² Ø¨Ø®Ø´ Ø²ÛŒØ±Ù†ÙˆÛŒØ³ØŒ Ù…ØªÙ† ÙˆÛŒØ¯Ø¦Ùˆ Ø±Ø§ Ø§Ø³ØªØ®Ø±Ø§Ø¬ ÛŒØ§ ÙˆØ§Ø±Ø¯ Ú©Ù†.',
+              child: Text('ابتدا از بخش زیرنویس، متن ویدئو را استخراج یا وارد کن.',
                   style: TextStyle(color: Colors.white54)),
             ),
         ],
@@ -554,12 +554,12 @@ class _AvhaHomeState extends State<AvhaHome> {
   Widget projectsPage() => ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          sectionTitle('Ù¾Ø±ÙˆÚ˜Ù‡â€ŒÙ‡Ø§ÛŒ Ù…Ù†', subtitle: 'Ù¾Ø±ÙˆÚ˜Ù‡ Ø¬Ø§Ø±ÛŒ Ø¯Ø± Ø§ÛŒÙ† Ù†Ø³Ø®Ù‡ Ø¯Ø± Ù‡Ù…ÛŒÙ† Ù†Ø´Ø³Øª Ù‚Ø§Ø¨Ù„ Ø¯Ø³ØªØ±Ø³ÛŒ Ø§Ø³Øª.'),
+          sectionTitle('پروژه‌های من', subtitle: 'پروژه جاری در این نسخه در همین نشست قابل دسترسی است.'),
           if (videoFile == null)
             card(child: const Column(children: [
               Icon(Icons.folder_open, color: gold, size: 42),
               SizedBox(height: 8),
-              Text('Ù‡Ù†ÙˆØ² ÙˆÛŒØ¯Ø¦ÙˆÛŒÛŒ Ø§Ù†ØªØ®Ø§Ø¨ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.'),
+              Text('هنوز ویدئویی انتخاب نشده است.'),
             ]))
           else
             card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -568,10 +568,10 @@ class _AvhaHomeState extends State<AvhaHome> {
               Text(videoFile!.path.split(Platform.pathSeparator).last,
                   maxLines: 2, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 10),
-              goldButton('Ø¨Ø§Ø² Ú©Ø±Ø¯Ù† Ø¯Ø± ØªØ¯ÙˆÛŒÙ†', () => go(5), icon: Icons.edit),
+              goldButton('باز کردن در تدوین', () => go(5), icon: Icons.edit),
             ])),
           const SizedBox(height: 12),
-          const Text('Ø°Ø®ÛŒØ±Ù‡ Ø¯Ø§Ø¦Ù…ÛŒ Ù¾Ø±ÙˆÚ˜Ù‡â€ŒÙ‡Ø§ Ùˆ Ø§Ø¯Ø§Ù…Ù‡ ØªØ¯ÙˆÛŒÙ† Ù¾Ø³ Ø§Ø² Ø¨Ø³ØªÙ† Ø¨Ø±Ù†Ø§Ù…Ù‡ Ø¯Ø± Ù…Ø±Ø­Ù„Ù‡ Ø¨Ø¹Ø¯ Ø§Ø¶Ø§ÙÙ‡ Ù…ÛŒâ€ŒØ´ÙˆØ¯.',
+          const Text('ذخیره دائمی پروژه‌ها و ادامه تدوین پس از بستن برنامه در مرحله بعد اضافه می‌شود.',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
         ],
       );
@@ -581,35 +581,35 @@ class _AvhaHomeState extends State<AvhaHome> {
         children: [
           Row(children: [
             IconButton(onPressed: () => go(0), icon: const Icon(Icons.arrow_forward, color: gold)),
-            const Expanded(child: Text('Ù…Ø­ÛŒØ· ØªØ¯ÙˆÛŒÙ†', style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold))),
-            TextButton(onPressed: () => showInfo('Ø®Ø±ÙˆØ¬ÛŒ ÙˆÛŒØ¯Ø¦Ùˆ', 'Ø®Ø±ÙˆØ¬ÛŒ Ù†Ù‡Ø§ÛŒÛŒ Ùˆ Ø±Ù†Ø¯Ø± ØªØ¯ÙˆÛŒÙ† Ø¯Ø± Ù…Ø±Ø­Ù„Ù‡ Ø¨Ø¹Ø¯ ÙØ¹Ø§Ù„ Ù…ÛŒâ€ŒØ´ÙˆØ¯.'), child: const Text('Ø®Ø±ÙˆØ¬ÛŒ')),
+            const Expanded(child: Text('محیط تدوین', style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold))),
+            TextButton(onPressed: () => showInfo('خروجی ویدئو', 'خروجی نهایی و رندر تدوین در مرحله بعد فعال می‌شود.'), child: const Text('خروجی')),
           ]),
           if (videoFile == null) ...[
-            card(child: const Text('Ø¨Ø±Ø§ÛŒ Ø´Ø±ÙˆØ¹ ØªØ¯ÙˆÛŒÙ†ØŒ Ø§Ø¨ØªØ¯Ø§ Ø§Ø² ØµÙØ­Ù‡ Ø®Ø§Ù†Ù‡ ÛŒÚ© ÙˆÛŒØ¯Ø¦Ùˆ Ø§Ù†ØªØ®Ø§Ø¨ Ú©Ù†.')),
+            card(child: const Text('برای شروع تدوین، ابتدا از صفحه خانه یک ویدئو انتخاب کن.')),
             const SizedBox(height: 10),
-            goldButton('Ø§Ù†ØªØ®Ø§Ø¨ ÙˆÛŒØ¯Ø¦Ùˆ', pickVideo, icon: Icons.video_library),
+            goldButton('انتخاب ویدئو', pickVideo, icon: Icons.video_library),
           ] else ...[
             videoPreview(height: 230),
             const SizedBox(height: 12),
             card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Ù†ÙˆØ§Ø± Ø²Ù…Ø§Ù† ÙˆÛŒØ¯Ø¦Ùˆ', style: TextStyle(fontWeight: FontWeight.bold, color: gold)),
+              const Text('نوار زمان ویدئو', style: TextStyle(fontWeight: FontWeight.bold, color: gold)),
               const SizedBox(height: 10),
               VideoProgressIndicator(videoController!, allowScrubbing: true,
                   colors: const VideoProgressColors(playedColor: gold, bufferedColor: Colors.white24)),
               const SizedBox(height: 8),
-              const Text('Ù¾ÛŒØ´â€ŒÙ†Ù…Ø§ÛŒØ´ Ùˆ Ø¬Ø§Ø¨Ù‡â€ŒØ¬Ø§ÛŒÛŒ Ø±ÙˆÛŒ ÙˆÛŒØ¯Ø¦Ùˆ ÙØ¹Ø§Ù„ Ø§Ø³ØªØ› Ø§Ø¨Ø²Ø§Ø±Ù‡Ø§ÛŒ Ø¨Ø±Ø´ Ùˆ Ù„Ø§ÛŒÙ‡â€ŒÙ‡Ø§ Ø¯Ø± ÙØ§Ø² ØªØ¯ÙˆÛŒÙ† Ø§Ø¶Ø§ÙÙ‡ Ù…ÛŒâ€ŒØ´ÙˆÙ†Ø¯.',
+              const Text('پیش‌نمایش و جابه‌جایی روی ویدئو فعال است؛ ابزارهای برش و لایه‌ها در فاز تدوین اضافه می‌شوند.',
                   style: TextStyle(color: Colors.white54, fontSize: 12)),
             ])),
             const SizedBox(height: 12),
-            const Text('Ø§Ø¨Ø²Ø§Ø±Ù‡Ø§ÛŒ ØªØ¯ÙˆÛŒÙ†', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            const Text('ابزارهای تدوین', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              'Ø¨Ø±Ø´', 'ØªÙ‚Ø³ÛŒÙ…', 'Ù…ÙˆØ³ÛŒÙ‚ÛŒ', 'Ù…ØªÙ†', 'ÙÛŒÙ„ØªØ±', 'Ø§ÙÚ©Øª',
-              'ØªÙ†Ø¸ÛŒÙ… Ø±Ù†Ú¯', 'ØªØ±Ù†Ø²ÛŒØ´Ù†', 'Ø²ÛŒØ±Ù†ÙˆÛŒØ³', 'Ø§Ø³ØªÛŒÚ©Ø±',
+              'برش', 'تقسیم', 'موسیقی', 'متن', 'فیلتر', 'افکت',
+              'تنظیم رنگ', 'ترنزیشن', 'زیرنویس', 'استیکر',
             ].map((name) => ActionChip(
               avatar: const Icon(Icons.construction, size: 17, color: gold),
               label: Text(name),
-              onPressed: () => showInfo(name, 'Ø§Ø¨Ø²Ø§Ø± $name Ø¯Ø± Ø·Ø±Ø§Ø­ÛŒ Ù…Ø´Ø®Øµ Ø´Ø¯Ù‡ Ùˆ Ø§ØªØµØ§Ù„ Ø¹Ù…Ù„Ú©Ø±Ø¯ ÙˆØ§Ù‚Ø¹ÛŒ Ø¢Ù† Ø¯Ø± Ù…Ø±Ø­Ù„Ù‡ ØªØ¯ÙˆÛŒÙ† Ø§Ù†Ø¬Ø§Ù… Ù…ÛŒâ€ŒØ´ÙˆØ¯.'),
+              onPressed: () => showInfo(name, 'ابزار $name در طراحی مشخص شده و اتصال عملکرد واقعی آن در مرحله تدوین انجام می‌شود.'),
               backgroundColor: panel,
             )).toList()),
           ],
@@ -623,7 +623,7 @@ class _AvhaHomeState extends State<AvhaHome> {
         backgroundColor: panel,
         title: Text(title),
         content: Text(message),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Ù…ØªÙˆØ¬Ù‡ Ø´Ø¯Ù…'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('متوجه شدم'))],
       ),
     );
   }
@@ -631,7 +631,7 @@ class _AvhaHomeState extends State<AvhaHome> {
   Widget settingsPage() => ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          sectionTitle('ØªÙ†Ø¸ÛŒÙ…Ø§Øª', subtitle: 'Ø´Ø®ØµÛŒâ€ŒØ³Ø§Ø²ÛŒ ØªØ¬Ø±Ø¨Ù‡ Ø§Ø³ØªÙØ§Ø¯Ù‡ Ø§Ø² AVHA'),
+          sectionTitle('تنظیمات', subtitle: 'شخصی‌سازی تجربه استفاده از AVHA'),
           card(child: Row(children: [
             Container(
               width: 54, height: 54,
@@ -640,95 +640,95 @@ class _AvhaHomeState extends State<AvhaHome> {
             ),
             const SizedBox(width: 12),
             const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Ú©Ø§Ø±Ø¨Ø± AVHA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-              Text('Ø¨Ø¯ÙˆÙ† Ù†ÛŒØ§Ø² Ø¨Ù‡ Ø­Ø³Ø§Ø¨ Ú©Ø§Ø±Ø¨Ø±ÛŒ', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Text('کاربر AVHA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              Text('بدون نیاز به حساب کاربری', style: TextStyle(color: Colors.white54, fontSize: 12)),
             ])),
             const Icon(Icons.check_circle, color: Colors.green),
           ])),
           const SizedBox(height: 12),
-          settingsGroup('Ø¸Ø§Ù‡Ø± Ø¨Ø±Ù†Ø§Ù…Ù‡', Icons.palette_outlined, [
+          settingsGroup('ظاهر برنامه', Icons.palette_outlined, [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Ø­Ø§Ù„Øª ØªØ§Ø±ÛŒÚ©'),
+              title: const Text('حالت تاریک'),
               value: darkTheme,
               activeColor: gold,
               onChanged: (v) => setState(() => darkTheme = v),
             ),
-            dropdownSetting('Ø±Ù†Ú¯ Ø±Ø§Ø¨Ø· Ú©Ø§Ø±Ø¨Ø±ÛŒ', accentChoice, ['Ø·Ù„Ø§ÛŒÛŒ', 'Ø¢Ø¨ÛŒ', 'Ø¨Ù†ÙØ´'],
+            dropdownSetting('رنگ رابط کاربری', accentChoice, ['طلایی', 'آبی', 'بنفش'],
                 (v) => setState(() => accentChoice = v)),
-            dropdownSetting('Ø²Ø¨Ø§Ù† Ø¨Ø±Ù†Ø§Ù…Ù‡', language, ['ÙØ§Ø±Ø³ÛŒ', 'English'],
+            dropdownSetting('زبان برنامه', language, ['فارسی', 'English'],
                 (v) => setState(() => language = v)),
           ]),
-          settingsGroup('ØªÙ†Ø¸ÛŒÙ…Ø§Øª ØªØ¯ÙˆÛŒÙ†', Icons.movie_outlined, [
-            dropdownSetting('Ú©ÛŒÙÛŒØª Ù¾ÛŒØ´â€ŒÙØ±Ø¶ Ø®Ø±ÙˆØ¬ÛŒ', outputQuality, ['720p', '1080p', '2K', '4K'],
+          settingsGroup('تنظیمات تدوین', Icons.movie_outlined, [
+            dropdownSetting('کیفیت پیش‌فرض خروجی', outputQuality, ['720p', '1080p', '2K', '4K'],
                 (v) => setState(() => outputQuality = v)),
-            dropdownSetting('Ù†Ø³Ø¨Øª ØªØµÙˆÛŒØ± Ù¾ÛŒØ´â€ŒÙØ±Ø¶', aspectRatio, ['9:16', '16:9', '1:1', '4:5'],
+            dropdownSetting('نسبت تصویر پیش‌فرض', aspectRatio, ['9:16', '16:9', '1:1', '4:5'],
                 (v) => setState(() => aspectRatio = v)),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Ø°Ø®ÛŒØ±Ù‡ Ø®ÙˆØ¯Ú©Ø§Ø± Ù¾Ø±ÙˆÚ˜Ù‡â€ŒÙ‡Ø§'),
-              subtitle: const Text('ÙØ¹Ø§Ù„â€ŒØ³Ø§Ø²ÛŒ Ø°Ø®ÛŒØ±Ù‡ Ø®ÙˆØ¯Ú©Ø§Ø± Ø¯Ø± Ù†Ø³Ø®Ù‡ Ø¢ÛŒÙ†Ø¯Ù‡'),
+              title: const Text('ذخیره خودکار پروژه‌ها'),
+              subtitle: const Text('فعال‌سازی ذخیره خودکار در نسخه آینده'),
               value: autoSave,
               activeColor: gold,
               onChanged: (v) => setState(() => autoSave = v),
             ),
           ]),
-          settingsGroup('Ù‡ÙˆØ´ Ù…ØµÙ†ÙˆØ¹ÛŒ', Icons.psychology_outlined, [
-            dropdownSetting('Ø²Ø¨Ø§Ù† ØªÙˆÙ„ÛŒØ¯ Ù…Ø­ØªÙˆØ§', language, ['ÙØ§Ø±Ø³ÛŒ', 'English'],
+          settingsGroup('هوش مصنوعی', Icons.psychology_outlined, [
+            dropdownSetting('زبان تولید محتوا', language, ['فارسی', 'English'],
                 (v) => setState(() => language = v)),
-            dropdownSetting('Ù„Ø­Ù† Ù…ØªÙ†', aiTone, ['Ø¯ÙˆØ³ØªØ§Ù†Ù‡', 'Ø±Ø³Ù…ÛŒ', 'ØªØ¨Ù„ÛŒØºØ§ØªÛŒ', 'ØµÙ…ÛŒÙ…ÛŒ'],
+            dropdownSetting('لحن متن', aiTone, ['دوستانه', 'رسمی', 'تبلیغاتی', 'صمیمی'],
                 (v) => setState(() => aiTone = v)),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('ØµØ¯Ø§ÛŒ Ú¯ÙˆÛŒÙ†Ø¯Ù‡'),
-              subtitle: Text(selectedVoice == 'fa-IR-FaridNeural' ? 'ØµØ¯Ø§ÛŒ Ù…Ø±Ø¯' : 'ØµØ¯Ø§ÛŒ Ø²Ù†'),
+              title: const Text('صدای گوینده'),
+              subtitle: Text(selectedVoice == 'fa-IR-FaridNeural' ? 'صدای مرد' : 'صدای زن'),
               trailing: const Icon(Icons.chevron_left),
               onTap: () => setState(() => selectedVoice = selectedVoice == 'fa-IR-FaridNeural'
                   ? 'fa-IR-DilaraNeural' : 'fa-IR-FaridNeural'),
             ),
           ]),
-          settingsGroup('Ø§Ø¹Ù„Ø§Ù†â€ŒÙ‡Ø§', Icons.notifications_none, [
+          settingsGroup('اعلان‌ها', Icons.notifications_none, [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Ø¯Ø±ÛŒØ§ÙØª Ø§Ø¹Ù„Ø§Ù†â€ŒÙ‡Ø§'),
+              title: const Text('دریافت اعلان‌ها'),
               value: notifications,
               activeColor: gold,
               onChanged: (v) => setState(() => notifications = v),
             ),
           ]),
-          settingsGroup('ÙØ¶Ø§ÛŒ Ø°Ø®ÛŒØ±Ù‡â€ŒØ³Ø§Ø²ÛŒ', Icons.storage_outlined, [
+          settingsGroup('فضای ذخیره‌سازی', Icons.storage_outlined, [
             const ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text('Ù…Ø¯ÛŒØ±ÛŒØª ÙØ§ÛŒÙ„â€ŒÙ‡Ø§ÛŒ Ù…ÙˆÙ‚Øª'),
-              subtitle: Text('Ù¾Ø§Ú©â€ŒØ³Ø§Ø²ÛŒ Ùˆ Ù…Ø¯ÛŒØ±ÛŒØª ÙØ¶Ø§ÛŒ Ø°Ø®ÛŒØ±Ù‡â€ŒØ³Ø§Ø²ÛŒ Ø¯Ø± Ù…Ø±Ø­Ù„Ù‡ Ø¨Ø¹Ø¯ Ø§Ø¶Ø§ÙÙ‡ Ù…ÛŒâ€ŒØ´ÙˆØ¯.'),
+              title: Text('مدیریت فایل‌های موقت'),
+              subtitle: Text('پاک‌سازی و مدیریت فضای ذخیره‌سازی در مرحله بعد اضافه می‌شود.'),
             ),
           ]),
-          settingsGroup('Ø¯Ø±Ø¨Ø§Ø±Ù‡ AVHA', Icons.info_outline, [
+          settingsGroup('درباره AVHA', Icons.info_outline, [
             const ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text('AVHA â€“ AI Content Studio'),
-              subtitle: Text('Ø®Ù„Ù‚ Ú©Ù†ØŒ Ù…ØªÙØ§ÙˆØª Ø¨Ø§Ø´.'),
+              title: Text('AVHA – AI Content Studio'),
+              subtitle: Text('خلق کن، متفاوت باش.'),
             ),
             const ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text('Ø§Ø¨ÙˆØ§Ù„ÙØ¶Ù„ Ù‡Ø§Ø´Ù…ÛŒ'),
-              subtitle: Text('Founder & Creator | Ø§ÛŒØ¯Ù‡â€ŒÙ¾Ø±Ø¯Ø§Ø² Ùˆ Ø³Ø§Ø²Ù†Ø¯Ù‡ AVHA'),
+              title: Text('ابوالفضل هاشمی'),
+              subtitle: Text('Founder & Creator | ایده‌پرداز و سازنده AVHA'),
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.camera_alt_outlined, color: gold),
-              title: const Text('Ø§ÛŒÙ†Ø³ØªØ§Ú¯Ø±Ø§Ù… Ø³Ø§Ø²Ù†Ø¯Ù‡'),
+              title: const Text('اینستاگرام سازنده'),
               subtitle: const Text('@aboalfazl7852'),
-              onTap: () => showInfo('Ø§ÛŒÙ†Ø³ØªØ§Ú¯Ø±Ø§Ù… Ø³Ø§Ø²Ù†Ø¯Ù‡', 'https://www.instagram.com/aboalfazl7852/'),
+              onTap: () => showInfo('اینستاگرام سازنده', 'https://www.instagram.com/aboalfazl7852/'),
             ),
             const ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text('Ù†Ø³Ø®Ù‡ Ø¨Ø±Ù†Ø§Ù…Ù‡'),
-              subtitle: Text('Ù†Ø³Ø®Ù‡ Ø¢Ø²Ù…Ø§ÛŒØ´ÛŒ ØªÙˆØ³Ø¹Ù‡'),
+              title: Text('نسخه برنامه'),
+              subtitle: Text('نسخه آزمایشی توسعه'),
             ),
           ]),
           const SizedBox(height: 12),
-          const Center(child: Text('Ø­Ø³Ø§Ø¨ Ú©Ø§Ø±Ø¨Ø±ÛŒØŒ Ú©Ø¯ ÙˆØ±ÙˆØ¯ Ùˆ Ø±Ù…Ø² Ø¹Ø¨ÙˆØ± ÙØ¹Ù„Ø§Ù‹ Ø¯Ø± Ø¨Ø±Ù†Ø§Ù…Ù‡ ÙˆØ¬ÙˆØ¯ Ù†Ø¯Ø§Ø±Ø¯.',
+          const Center(child: Text('حساب کاربری، کد ورود و رمز عبور فعلاً در برنامه وجود ندارد.',
               style: TextStyle(color: Colors.white38, fontSize: 11))),
         ],
       );
@@ -800,11 +800,11 @@ class _AvhaHomeState extends State<AvhaHome> {
           selectedIndex: tab <= 4 ? tab : 0,
           onDestinationSelected: (i) => go(i),
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: gold), label: 'Ø®Ø§Ù†Ù‡'),
-            NavigationDestination(icon: Icon(Icons.subtitles_outlined), selectedIcon: Icon(Icons.subtitles, color: gold), label: 'Ø²ÛŒØ±Ù†ÙˆÛŒØ³'),
-            NavigationDestination(icon: Icon(Icons.record_voice_over_outlined), selectedIcon: Icon(Icons.record_voice_over, color: gold), label: 'ØµØ¯Ø§'),
-            NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome, color: gold), label: 'Ù‡ÙˆØ´ Ù…ØµÙ†ÙˆØ¹ÛŒ'),
-            NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings, color: gold), label: 'ØªÙ†Ø¸ÛŒÙ…Ø§Øª'),
+            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: gold), label: 'خانه'),
+            NavigationDestination(icon: Icon(Icons.subtitles_outlined), selectedIcon: Icon(Icons.subtitles, color: gold), label: 'زیرنویس'),
+            NavigationDestination(icon: Icon(Icons.record_voice_over_outlined), selectedIcon: Icon(Icons.record_voice_over, color: gold), label: 'صدا'),
+            NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome, color: gold), label: 'هوش مصنوعی'),
+            NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings, color: gold), label: 'تنظیمات'),
           ],
         ),
       ),
