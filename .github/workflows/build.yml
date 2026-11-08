@@ -6,80 +6,82 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
 
     steps:
-      # دریافت فایل‌های مخزن
+
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # استخراج سورس Flutter از ZIP
-      - name: Extract Flutter Project
-        run: |
-          set -e
-
-          ZIP_FILE="KNUAF_AI_STUDIO_V2_GitHub_APK_Builder.zip"
-
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "Flutter ZIP file not found!"
-            exit 1
-          fi
-
-          mkdir -p extracted_app
-
-          unzip -q "$ZIP_FILE" -d extracted_app
-
-          PUBSPEC_PATH=$(find extracted_app -type f -name pubspec.yaml -print -quit)
-
-          if [ -z "$PUBSPEC_PATH" ]; then
-            echo "pubspec.yaml not found inside ZIP!"
-            exit 1
-          fi
-
-          APP_DIR=$(dirname "$PUBSPEC_PATH")
-
-          if [ ! -d "$APP_DIR/lib" ]; then
-            echo "Flutter lib directory not found!"
-            exit 1
-          fi
-
-          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
-
-          echo "Flutter project found:"
-          echo "$APP_DIR"
-
-      # نصب Flutter
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      # ایجاد فایل‌های اندروید
-      - name: Generate Android Project
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          flutter create --platforms=android --org com.knaufhashemi .
+      - name: Generate Android project files
+        run: flutter create --platforms=android --org com.knuafhashemi .
 
-      # دریافت وابستگی‌ها
-      - name: Get Dependencies
-        working-directory: ${{ env.APP_DIR }}
+      - name: Add Android Internet Permission
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path(
+              "android/app/src/main/AndroidManifest.xml"
+          )
+
+          content = path.read_text(encoding="utf-8")
+
+          permission = (
+              '<uses-permission '
+              'android:name="android.permission.INTERNET"/>'
+          )
+
+          if permission not in content:
+              position = content.find(">")
+
+              if position == -1:
+                  raise Exception("Invalid AndroidManifest.xml")
+
+              content = (
+                  content[:position + 1]
+                  + "\n    "
+                  + permission
+                  + content[position + 1:]
+              )
+
+              path.write_text(
+                  content,
+                  encoding="utf-8"
+              )
+
+          print("INTERNET permission is enabled")
+          PY
+
+      - name: Verify Internet Permission
+        run: |
+          grep "android.permission.INTERNET" \
+          android/app/src/main/AndroidManifest.xml
+
+      - name: Get dependencies
         run: flutter pub get
 
-      # ساخت APK
-      - name: Build Release APK
-        working-directory: ${{ env.APP_DIR }}
+      - name: Build release APK
+        env:
+          KNUAF_API_URL: ${{ vars.KNUAF_API_URL }}
         run: |
           flutter build apk --release \
-            --dart-define=KNUAF_API_URL=https://knuaf-ai-studio.fastapicloud.dev
+            --dart-define=KNUAF_API_URL="${KNUAF_API_URL:-https://knuaf-ai-studio.fastapicloud.dev}"
 
-      # ذخیره APK ساخته‌شده
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: KNUAF-AI-STUDIO-APK
-          path: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
-          retention-days: 7
