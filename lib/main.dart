@@ -120,6 +120,37 @@ class _AvhaHomeState extends State<AvhaHome> {
   List<File> voiceLibrary = [];
   List<File> clipsLibrary = [];
   String clipsFilter = 'Ù‡Ù…Ù‡';
+
+  // Preserve the original on-device folder names for existing user files.
+  String _legacyWorkspaceFolder(String value) => String.fromCharCodes(
+        value == 'Ú©Ø§Ø±ÛŒ'
+            ? [218, 169, 216, 167, 216, 177, 219, 338]
+            : [216, 180, 216, 174, 216, 181, 219, 338],
+      );
+
+  String _normalizeSavedSubtitleOption(String value, String kind) {
+    final legacy = <String, Map<String, String>>{
+      'color': {
+        String.fromCharCodes([216, 179, 217, 129, 219, 338, 216, 175]): 'Ø³ÙÛŒØ¯',
+        String.fromCharCodes([216, 183, 217, 8222, 216, 167, 219, 338, 219, 338]): 'Ø·Ù„Ø§ÛŒÛŒ',
+        String.fromCharCodes([216, 178, 216, 177, 216, 175]): 'Ø²Ø±Ø¯',
+        String.fromCharCodes([216, 162, 216, 168, 219, 338]): 'Ø¢Ø¨ÛŒ',
+        String.fromCharCodes([217, 8230, 216, 180, 218, 169, 219, 338]): 'Ù…Ø´Ú©ÛŒ',
+      },
+      'background': {
+        String.fromCharCodes([217, 8224, 219, 338, 217, 8230, 217, 8225, 226, 8364, 338, 216, 180, 217, 129, 216, 167, 217, 129]): 'Ù†ÛŒÙ…Ù‡â€ŒØ´ÙØ§Ù',
+        String.fromCharCodes([217, 190, 216, 177, 216, 177, 217, 8224, 218, 175]): 'Ù¾Ø±Ø±Ù†Ú¯',
+        String.fromCharCodes([216, 168, 216, 175, 217, 710, 217, 8224, 32, 217, 190, 216, 179, 226, 8364, 338, 216, 178, 217, 8230, 219, 338, 217, 8224, 217, 8225]): 'Ø¨Ø¯ÙˆÙ† Ù¾Ø³â€ŒØ²Ù…ÛŒÙ†Ù‡',
+      },
+      'animation': {
+        String.fromCharCodes([218, 169, 217, 8222, 217, 8230, 217, 8225, 226, 8364, 338, 216, 168, 217, 8225, 226, 8364, 338, 218, 169, 217, 8222, 217, 8230, 217, 8225]): 'Ú©Ù„Ù…Ù‡â€ŒØ¨Ù‡â€ŒÚ©Ù„Ù…Ù‡',
+      },
+      'font': {
+        String.fromCharCodes([217, 190, 219, 338, 216, 180, 226, 8364, 338, 217, 129, 216, 177, 216, 182]): 'Ù¾ÛŒØ´â€ŒÙØ±Ø¶',
+      },
+    };
+    return legacy[kind]?[value] ?? value;
+  }
   String selectedVoice = 'fa-IR-FaridNeural';
 
   final voiceController = TextEditingController();
@@ -322,7 +353,7 @@ class _AvhaHomeState extends State<AvhaHome> {
     final appDir = await getApplicationDocumentsDirectory();
     return Directory(
       '${appDir.path}${Platform.pathSeparator}AVHA'
-      '${Platform.pathSeparator}Audio${Platform.pathSeparator}$workspace',
+      '${Platform.pathSeparator}Audio${Platform.pathSeparator}${_legacyWorkspaceFolder(workspace)}',
     );
   }
 
@@ -398,7 +429,7 @@ class _AvhaHomeState extends State<AvhaHome> {
   Future<void> loadClipsLibrary() async {
     try {
       final root = await clipsRootDirectory();
-      for (final name in ['Ø´Ø®ØµÛŒ', 'Ú©Ø§Ø±ÛŒ']) {
+      for (final name in [_legacyWorkspaceFolder('Ø´Ø®ØµÛŒ'), _legacyWorkspaceFolder('Ú©Ø§Ø±ÛŒ')]) {
         await Directory('${root.path}${Platform.pathSeparator}$name').create(recursive: true);
       }
       final files = root.listSync(recursive: true).whereType<File>().where((f) {
@@ -411,7 +442,12 @@ class _AvhaHomeState extends State<AvhaHome> {
     }
   }
 
-  String clipWorkspace(File file) => file.parent.path.split(Platform.pathSeparator).last;
+  String clipWorkspace(File file) {
+    final folder = file.parent.path.split(Platform.pathSeparator).last;
+    if (folder == _legacyWorkspaceFolder('Ú©Ø§Ø±ÛŒ') || folder == 'Ú©Ø§Ø±ÛŒ') return 'Ú©Ø§Ø±ÛŒ';
+    if (folder == _legacyWorkspaceFolder('Ø´Ø®ØµÛŒ') || folder == 'Ø´Ø®ØµÛŒ') return 'Ø´Ø®ØµÛŒ';
+    return folder;
+  }
 
   Future<File> _projectSidecar(File clip) async =>
       File('${clip.path}.avha.json');
@@ -511,10 +547,26 @@ class _AvhaHomeState extends State<AvhaHome> {
         transcriptApproved = data['transcriptApproved'] == true;
         subtitleFontSize = (data['subtitleFontSize'] as num?)?.toDouble() ?? 22;
         subtitleVerticalPosition = (data['subtitleVerticalPosition'] as num?)?.toDouble() ?? 0.82;
-        subtitleColorChoice = (data['subtitleColorChoice'] ?? 'Ø³ÙÛŒØ¯').toString();
-        subtitleBackgroundChoice = (data['subtitleBackgroundChoice'] ?? 'Ù†ÛŒÙ…Ù‡â€ŒØ´ÙØ§Ù').toString();
-        subtitleAnimation = (data['subtitleAnimation'] ?? 'Ú©Ù„Ù…Ù‡â€ŒØ¨Ù‡â€ŒÚ©Ù„Ù…Ù‡').toString();
-        subtitleFontFamily = (data['subtitleFontFamily'] ?? 'Ù¾ÛŒØ´â€ŒÙØ±Ø¶').toString();
+        subtitleColorChoice = _normalizeSavedSubtitleOption(
+          (data['subtitleColorChoice'] ?? 'Ø³ÙÛŒØ¯').toString(), 'color');
+        if (!['Ø³ÙÛŒØ¯', 'Ø·Ù„Ø§ÛŒÛŒ', 'Ø²Ø±Ø¯', 'Ø¢Ø¨ÛŒ', 'Ù…Ø´Ú©ÛŒ'].contains(subtitleColorChoice)) {
+          subtitleColorChoice = 'Ø³ÙÛŒØ¯';
+        }
+        subtitleBackgroundChoice = _normalizeSavedSubtitleOption(
+          (data['subtitleBackgroundChoice'] ?? 'Ù†ÛŒÙ…Ù‡â€ŒØ´ÙØ§Ù').toString(), 'background');
+        if (!['Ù†ÛŒÙ…Ù‡â€ŒØ´ÙØ§Ù', 'Ù¾Ø±Ø±Ù†Ú¯', 'Ø¨Ø¯ÙˆÙ† Ù¾Ø³â€ŒØ²Ù…ÛŒÙ†Ù‡'].contains(subtitleBackgroundChoice)) {
+          subtitleBackgroundChoice = 'Ù†ÛŒÙ…Ù‡â€ŒØ´ÙØ§Ù';
+        }
+        subtitleAnimation = _normalizeSavedSubtitleOption(
+          (data['subtitleAnimation'] ?? 'Ú©Ù„Ù…Ù‡â€ŒØ¨Ù‡â€ŒÚ©Ù„Ù…Ù‡').toString(), 'animation');
+        if (!['ÛŒÚ©â€ŒØ¬Ø§', 'Ø­Ø±Ùâ€ŒØ¨Ù‡â€ŒØ­Ø±Ù', 'Ú©Ù„Ù…Ù‡â€ŒØ¨Ù‡â€ŒÚ©Ù„Ù…Ù‡', 'Ø¨Ø±Ø¬Ø³ØªÙ‡â€ŒØ³Ø§Ø²ÛŒ Ú©Ù„Ù…Ù‡ ÙØ¹Ø§Ù„'].contains(subtitleAnimation)) {
+          subtitleAnimation = 'Ú©Ù„Ù…Ù‡â€ŒØ¨Ù‡â€ŒÚ©Ù„Ù…Ù‡';
+        }
+        subtitleFontFamily = _normalizeSavedSubtitleOption(
+          (data['subtitleFontFamily'] ?? 'Ù¾ÛŒØ´â€ŒÙØ±Ø¶').toString(), 'font');
+        if (!['Ù¾ÛŒØ´â€ŒÙØ±Ø¶', 'serif', 'monospace'].contains(subtitleFontFamily)) {
+          subtitleFontFamily = 'Ù¾ÛŒØ´â€ŒÙØ±Ø¶';
+        }
         ideas = (data['ideas'] ?? '').toString();
         caption = (data['caption'] ?? '').toString();
         topic = (data['topic'] ?? '').toString();
@@ -539,7 +591,7 @@ class _AvhaHomeState extends State<AvhaHome> {
     try {
       await _flushProjectAutosave();
       final root = await clipsRootDirectory();
-      final dir = Directory('${root.path}${Platform.pathSeparator}$workspace');
+      final dir = Directory('${root.path}${Platform.pathSeparator}${_legacyWorkspaceFolder(workspace)}');
       await dir.create(recursive: true);
       File projectClip;
       final currentPath = videoFile!.absolute.path;
